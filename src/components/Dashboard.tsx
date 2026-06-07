@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { useDashboardData } from '../hooks/useDashboardData';
 import FilterBar from './FilterBar';
 import ComparisonTable from './ComparisonTable';
@@ -10,6 +11,7 @@ function todayISO(): string {
 }
 
 export default function Dashboard() {
+  const { user, logout } = useAuth();
   const [params, setParams] = useState<DashboardParams>({
     fromDate:      todayISO(),
     toDate:        todayISO(),
@@ -34,13 +36,24 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-gray-900 text-white px-6 py-4 shadow">
-        <h1 className="text-xl font-bold tracking-tight">
-          Broker Execution <span className="text-blue-400">vs</span> Market Dashboard
-        </h1>
-        <p className="text-xs text-gray-400 mt-0.5">
-          UAT · {params.stockExchange} · {params.fromDate} → {params.toDate}
-        </p>
+      <header className="bg-gray-900 text-white px-6 py-4 shadow flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight">
+            Broker Execution <span className="text-blue-400">vs</span> Market Dashboard
+          </h1>
+          <p className="text-xs text-gray-400 mt-0.5">
+            UAT · {params.stockExchange} · {params.fromDate} → {params.toDate}
+          </p>
+        </div>
+        <div className="flex items-center gap-3 text-sm">
+          {user && <span className="text-gray-300">{user.displayName || user.email}</span>}
+          <button
+            onClick={logout}
+            className="px-3 py-1.5 bg-gray-700 rounded-lg text-xs font-semibold hover:bg-gray-600"
+          >
+            Sign out
+          </button>
+        </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
@@ -59,7 +72,7 @@ export default function Dashboard() {
         )}
         {allFailed && (
           <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-800 flex items-center justify-between">
-            <span>❌ All broker fetches failed. Check your JWT token and network.</span>
+            <span>❌ All broker fetches failed. Check your session and network.</span>
             <button
               onClick={() => setFetchTrigger(t => t + 1)}
               className="ml-4 px-3 py-1 bg-red-600 text-white rounded text-xs font-semibold hover:bg-red-700"

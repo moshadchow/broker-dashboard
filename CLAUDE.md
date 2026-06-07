@@ -14,7 +14,7 @@ React dashboard fetching order-execution data per broker (endpoint 1) and market
 | Charts   | Recharts                            |
 | Styling  | Tailwind CSS                        |
 | HTTP     | Axios                               |
-| Config   | Hardcoded broker IDs, env-based JWT |
+| Config   | Hardcoded broker IDs, login-based session with token refresh |
 
 ---
 
@@ -24,19 +24,26 @@ React dashboard fetching order-execution data per broker (endpoint 1) and market
 src/
 ├── config/
 │   ├── brokers.ts          # Static XBrokerId list
-│   └── api.ts              # Base URL, endpoint templates, thresholds
+│   └── api.ts              # Base URL, endpoint templates, thresholds, auth constants
 ├── services/
-│   └── apiService.ts       # Axios calls for both endpoints
+│   ├── apiService.ts       # Axios calls for both dashboard endpoints
+│   ├── authService.ts      # login / refreshAccessToken / logout against /api/login*
+│   ├── authInterceptor.ts  # Axios interceptors: proactive + reactive token refresh
+│   └── tokenStorage.ts     # Persist/read session + deviceId in localStorage
+├── context/
+│   └── AuthContext.tsx     # AuthProvider/useAuth — owns auth status + user
 ├── hooks/
 │   └── useDashboardData.ts # Orchestrates parallel fetches + aggregation
 ├── components/
-│   ├── Dashboard.tsx       # Root layout
+│   ├── Login.tsx           # Login screen (loginId/password/MFA)
+│   ├── Dashboard.tsx       # Root layout (rendered once authenticated)
 │   ├── FilterBar.tsx       # Date range + stock exchange inputs
 │   ├── ComparisonTable.tsx # Data table: per-broker + aggregate vs market
 │   └── ComparisonChart.tsx # Recharts ComposedChart
 ├── types/
-│   └── index.ts            # All shared TS interfaces
-└── App.tsx
+│   ├── index.ts            # All shared dashboard TS interfaces
+│   └── auth.ts             # Login/refresh request & response, session, auth state
+└── App.tsx                 # Wraps AuthProvider; gates Login vs Dashboard
 ```
 
 ---
@@ -74,12 +81,35 @@ export const ENDPOINTS = {
 export const MARKET_SHARE_THRESHOLD = 5;
 ```
 
-> JWT set via `VITE_JWT_TOKEN` in `.env.local` — never commit.
+> No JWT env var — the access token is obtained via `/api/login` and kept fresh
+> automatically by the auth interceptor (see "Authentication Flow" below).
 
-```
-# .env.local
-VITE_JWT_TOKEN=your_jwt_here
-```
+---
+
+## Authentication Flow
+
+The dashboard is gated behind a login screen (`Login.tsx` + `AuthContext`):
+
+1. **Login** — `authService.login()` POSTs to `/api/login` with `loginId`,
+   `password`, a persisted client `deviceId`, and `appType`. On success the
+   returned `accessToken` / `refreshToken` / `accessTokenExpiryDateTimeUtc` are
+   stored via `tokenStorage` (localStorage). If `isMfaRequired` is returned,
+   the login screen requests an `mfaCode` and resubmits with the returned
+   `mfaKey`.
+2. **Proactive refresh** — the Axios request interceptor
+   (`authInterceptor.ts`) checks `accessTokenExpiryDateTimeUtc` against
+   `TOKEN_REFRESH_SKEW_MS` before every request; if the token is near expiry it
+   awaits a deduped `refreshAccessToken()` call (concurrent requests share one
+   in-flight refresh) and attaches the renewed token.
+3. **Reactive refresh** — the response interceptor retries a single `401` with
+   a fresh token (guarded by a `_retry` flag). If the refresh itself fails, the
+   session is cleared and a `session-invalidated` event is dispatched, which
+   `AuthContext` listens for to drop back to the login screen.
+4. **Sign out** — `Dashboard` exposes a "Sign out" button that clears the
+   stored session via `authService.logout()`.
+
+`deviceId` is a `crypto.randomUUID()` generated once and persisted in
+localStorage so it stays stable across login/refresh/logout cycles.
 
 ---
 
@@ -302,7 +332,7 @@ function useDashboardData(params: DashboardParams): DashboardData
 | All brokers fail | Full error state + retry button |
 | Market endpoint fails | Banner warning; share % columns show `N/A` |
 | `success: false` in body | Treat as fetch error |
-| 401 on any call | Show re-auth banner; stop further fetches |
+| 401 on any call | Single refresh-and-retry; on repeated failure clear session and show login screen |
 
 ---
 
@@ -312,7 +342,8 @@ function useDashboardData(params: DashboardParams): DashboardData
 |------|------|----------|
 | Broker IDs + labels | Hardcoded | `config/brokers.ts` |
 | Base URL | Hardcoded | `config/api.ts` |
-| JWT Token | Env var | `.env.local` → `VITE_JWT_TOKEN` |
+| Session (access/refresh token) | Runtime, from `/api/login` | `services/tokenStorage.ts` (localStorage) |
+| Token refresh skew | Hardcoded const | `config/api.ts` → `TOKEN_REFRESH_SKEW_MS` |
 | Market share threshold | Hardcoded const | `config/api.ts` |
 | Date range | UI-configurable | `FilterBar` |
 | Stock Exchange | UI-configurable | `FilterBar` |
@@ -350,10 +381,9 @@ export default defineConfig({
 > With proxy active, set `BASE_URL = ""` in `config/api.ts` for dev.  
 > For prod build, set `BASE_URL = "https://uat.xfltrade.com:20121"` or inject via env.
 
-**`.env.local`:**
-```
-VITE_JWT_TOKEN=<your_token>
-```
+No `.env.local` needed for auth — sign in via the login screen; the session
+(access + refresh token) is obtained from `/api/login` and persisted/renewed
+automatically (see "Authentication Flow").
 
 ```bash
 npm run dev
@@ -372,7 +402,6 @@ npm run dev
 
 ## Future Enhancements (Out of Scope)
 
-- Auth flow / token refresh
 - Export to CSV/XLSX
 - Date range presets (Today, Last 7 days)
 - Multi-exchange tabs

@@ -4,6 +4,9 @@
 export const BASE_URL = "";
 
 export const ENDPOINTS = {
+  login:        '/api/login',
+  refreshToken: '/api/login/refresh-token',
+
   brokerSummary: (fromDate: string, toDate: string): string =>
     `/api/broker-summary/orders-execution?fromDate=${fromDate}&toDate=${toDate}`,
 
@@ -13,3 +16,9 @@ export const ENDPOINTS = {
 
 // Share % cells: green if >= threshold, amber if below
 export const MARKET_SHARE_THRESHOLD = 5;
+
+// appType expected by /api/login
+export const APP_TYPE = 1;
+
+// Proactively refresh the access token this many ms before it expires
+export const TOKEN_REFRESH_SKEW_MS = 60_000;

@@ -5,7 +5,7 @@ import type {
   MarketTradeInfoApiResponse,
 } from '../types';
 
-const token = import.meta.env.VITE_JWT_TOKEN as string;
+// Authorization header is attached by the auth request interceptor (see authInterceptor.ts)
 
 export async function fetchBrokerSummary(
   brokerId: string,
@@ -16,8 +16,7 @@ export async function fetchBrokerSummary(
     `${BASE_URL}${ENDPOINTS.brokerSummary(fromDate, toDate)}`,
     {
       headers: {
-        'X-BrokerId':    brokerId,
-        'Authorization': `Bearer ${token}`,
+        'X-BrokerId': brokerId,
       },
     },
   );
@@ -32,12 +31,7 @@ export async function fetchMarketTradeInfo(
 ): Promise<MarketTradeInfoApiResponse> {
   const res = await axios.get<MarketTradeInfoApiResponse>(
     `${BASE_URL}${ENDPOINTS.marketTradeInfo(stockExchange)}`,
-    {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        // No X-BrokerId on this endpoint
-      },
-    },
+    // No X-BrokerId on this endpoint; Authorization attached by interceptor
   );
   if (!res.data.success) {
     throw new Error(`Market trade info: success=false`);
