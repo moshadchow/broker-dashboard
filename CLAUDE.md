@@ -2,7 +2,15 @@
 
 ## Project Overview
 
-React dashboard fetching order-execution data per broker (endpoint 1) and market-wide aggregated trade info (endpoint 2), rendering a comparison data table + Recharts chart.
+React dashboard fetching order-execution data per broker and market-wide
+aggregated trade info, rendering a comparison data table + Recharts chart.
+
+Authentication and data fetching against the external broker API
+(`https://uat.xfltrade.com:20121`) is handled entirely by a FastAPI + MySQL
+backend (`/backend`). The backend authenticates with a service account on a
+schedule, caches the latest broker/market data in MySQL, and serves it to the
+frontend via internal endpoints. The frontend never talks to the external API
+or handles JWTs — manual login is disabled (stub UI only).
 
 ---
 
@@ -14,7 +22,8 @@ React dashboard fetching order-execution data per broker (endpoint 1) and market
 | Charts   | Recharts                            |
 | Styling  | Tailwind CSS                        |
 | HTTP     | Axios                               |
-| Config   | Hardcoded broker IDs, login-based session with token refresh |
+| Backend  | FastAPI + SQLAlchemy + MySQL + APScheduler |
+| Config   | Hardcoded broker IDs, internal-endpoint data fetching |
 
 ---
 
@@ -24,26 +33,38 @@ React dashboard fetching order-execution data per broker (endpoint 1) and market
 src/
 ├── config/
 │   ├── brokers.ts          # Static XBrokerId list
-│   └── api.ts              # Base URL, endpoint templates, thresholds, auth constants
+│   └── api.ts              # Base URL, internal endpoint paths, thresholds
 ├── services/
-│   ├── apiService.ts       # Axios calls for both dashboard endpoints
-│   ├── authService.ts      # login / refreshAccessToken / logout against /api/login*
-│   ├── authInterceptor.ts  # Axios interceptors: proactive + reactive token refresh
-│   └── tokenStorage.ts     # Persist/read session + deviceId in localStorage
-├── context/
-│   └── AuthContext.tsx     # AuthProvider/useAuth — owns auth status + user
+│   └── apiService.ts       # Axios calls to internal backend endpoints
 ├── hooks/
-│   └── useDashboardData.ts # Orchestrates parallel fetches + aggregation
+│   └── useDashboardData.ts # Fetches internal endpoints + computes aggregation
 ├── components/
-│   ├── Login.tsx           # Login screen (loginId/password/MFA)
-│   ├── Dashboard.tsx       # Root layout (rendered once authenticated)
-│   ├── FilterBar.tsx       # Date range + stock exchange inputs
+│   ├── Login.tsx           # Disabled login stub ("Auto-auth active")
+│   ├── Dashboard.tsx       # Root layout
+│   ├── FilterBar.tsx       # Date range + stock exchange inputs (display only)
 │   ├── ComparisonTable.tsx # Data table: per-broker + aggregate vs market
 │   └── ComparisonChart.tsx # Recharts ComposedChart
 ├── types/
-│   ├── index.ts            # All shared dashboard TS interfaces
-│   └── auth.ts             # Login/refresh request & response, session, auth state
-└── App.tsx                 # Wraps AuthProvider; gates Login vs Dashboard
+│   └── index.ts            # All shared dashboard TS interfaces
+└── App.tsx                 # Renders Login (stub) + Dashboard directly
+
+backend/
+├── app/
+│   ├── main.py              # FastAPI app, lifespan (DB init + scheduler), CORS
+│   ├── config.py            # Settings (.env)
+│   ├── db/                  # SQLAlchemy engine/session
+│   ├── models/              # token_store, broker_snapshots, market_snapshots, pipeline_logs
+│   ├── schemas/              # Pydantic response models for internal endpoints
+│   ├── config_data/brokers.py  # BROKERS list — keep in sync with src/config/brokers.ts
+│   ├── services/
+│   │   ├── external_api.py  # httpx calls to external broker API
+│   │   ├── auth_service.py  # auth()/refresh + token_store CRUD
+│   │   ├── fetch_service.py # fetch_all(): 15 brokers + market
+│   │   ├── store_service.py # upserts into snapshot tables + pipeline_logs
+│   │   └── pipeline.py      # run_pipeline(): orchestration
+│   ├── scheduler/jobs.py    # APScheduler: startup run + daily cron
+│   └── routers/internal.py  # /api/internal/* endpoints
+└── requirements.txt
 ```
 
 ---
@@ -68,116 +89,106 @@ export const BROKERS: Broker[] = [
 ### `src/config/api.ts`
 
 ```ts
-export const BASE_URL = "https://uat.xfltrade.com:20121";
+// Empty string = Vite proxy handles routing in dev.
+// In production, requests to /api/internal/* are proxied to the FastAPI backend.
+
+export const BASE_URL = "";
 
 export const ENDPOINTS = {
-  brokerSummary: (fromDate: string, toDate: string) =>
-    `/api/broker-summary/orders-execution?fromDate=${fromDate}&toDate=${toDate}`,
-  marketTradeInfo: (stockExchange: string) =>
-    `/api/indexes/${encodeURIComponent(stockExchange)}/market-trade-info`,
+  internalBrokerData:  '/api/internal/broker-data',
+  internalMarketData:  '/api/internal/market-data',
+  internalTokenStatus: '/api/internal/token-status',
 };
 
 // Threshold for market-share color coding (%)
 export const MARKET_SHARE_THRESHOLD = 5;
 ```
 
-> No JWT env var — the access token is obtained via `/api/login` and kept fresh
-> automatically by the auth interceptor (see "Authentication Flow" below).
+> The frontend holds no JWT and never calls the external broker API directly.
+> All authentication and external-API access happens server-side in `/backend`
+> (see "Backend: Auto-Credential Pipeline" below).
 
 ---
 
-## Authentication Flow
+## Backend: Auto-Credential Pipeline (`/backend`)
 
-The dashboard is gated behind a login screen (`Login.tsx` + `AuthContext`):
+A FastAPI + MySQL service replaces the old client-side login flow. It
+authenticates against the external broker API
+(`https://uat.xfltrade.com:20121`) using a fixed service account, runs on a
+daily schedule (plus once at startup), and caches the latest broker/market data
+in MySQL for the frontend to read via internal endpoints.
 
-1. **Login** — `authService.login()` POSTs to `/api/login` with `loginId`,
-   `password`, a persisted client `deviceId`, and `appType`. On success the
-   returned `accessToken` / `refreshToken` / `accessTokenExpiryDateTimeUtc` are
-   stored via `tokenStorage` (localStorage). If `isMfaRequired` is returned,
-   the login screen requests an `mfaCode` and resubmits with the returned
-   `mfaKey`.
-2. **Proactive refresh** — the Axios request interceptor
-   (`authInterceptor.ts`) checks `accessTokenExpiryDateTimeUtc` against
-   `TOKEN_REFRESH_SKEW_MS` before every request; if the token is near expiry it
-   awaits a deduped `refreshAccessToken()` call (concurrent requests share one
-   in-flight refresh) and attaches the renewed token.
-3. **Reactive refresh** — the response interceptor retries a single `401` with
-   a fresh token (guarded by a `_retry` flag). If the refresh itself fails, the
-   session is cleared and a `session-invalidated` event is dispatched, which
-   `AuthContext` listens for to drop back to the login screen.
-4. **Sign out** — `Dashboard` exposes a "Sign out" button that clears the
-   stored session via `authService.logout()`.
+### Configuration (`backend/.env`, see `backend/.env.example`)
 
-`deviceId` is a `crypto.randomUUID()` generated once and persisted in
-localStorage so it stays stable across login/refresh/logout cycles.
+| Var | Purpose |
+|-----|---------|
+| `EXTERNAL_API_BASE_URL` | External broker API base (`https://uat.xfltrade.com:20121`) |
+| `APP_TYPE` | `appType` field sent to `/api/login` |
+| `AUTO_AUTH_USERNAME` / `AUTO_AUTH_PASSWORD` | Service-account credentials |
+| `AUTO_AUTH_DEVICE_ID` | Fixed device UUID for the service account (MFA assumed disabled) |
+| `SCHEDULED_TIME` | Daily pipeline run time, `HH:MM` (default `06:00`) |
+| `APP_TIMEZONE` | Timezone for scheduling + "today" computation (default `Asia/Dhaka`) |
+| `DEFAULT_STOCK_EXCHANGE` | Stock exchange used for the market fetch (default `DSE`) |
+| `TOKEN_REFRESH_SKEW_MINUTES` | Refresh access token if it expires within this window |
+| `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` / `DB_NAME` | MySQL connection (`mysql+pymysql://`) |
+| `BACKEND_HOST` / `BACKEND_PORT` | Uvicorn bind address |
+| `CORS_ALLOW_ORIGINS` | Allowed origins for the frontend dev server |
 
----
+`JWT_ACCESS_TOKEN`/`JWT_REFRESH_TOKEN` in `.env.example` are documentation
+placeholders only — the live token cache lives in the `token_store` MySQL
+table, not the `.env` file.
 
-## API Contract (Actual Response Shapes)
+### Pipeline (`app/services/pipeline.py` → `run_pipeline()`)
 
-### Endpoint 1 — Broker Summary
+1. Get a valid access token (`token_store` row; refresh if expiring within
+   `TOKEN_REFRESH_SKEW_MINUTES`, or full login if no row exists).
+2. Compute "today" in `APP_TIMEZONE`.
+3. Fetch all 15 brokers (`app/config_data/brokers.py`, sequential, per-broker
+   error isolation) + market trade info for `DEFAULT_STOCK_EXCHANGE`.
+4. If **all** brokers failed, refresh the token once and retry the fetch.
+5. Upsert results into `broker_snapshots` / `market_snapshots`.
+6. Record the run in `pipeline_logs` with status `success` / `partial` / `failed`.
 
-```
-GET /api/broker-summary/orders-execution?fromDate=YYYY-MM-DD&toDate=YYYY-MM-DD
-Headers:
-  X-BrokerId:    <broker.id>
-  Authorization: Bearer <JWT>
-```
+If `isMfaRequired` is returned during login, the cycle is logged as `failed`
+and skipped (MFA is assumed disabled for the service account).
 
-**Response:**
-```ts
-interface BrokerSummaryApiResponse {
-  $id: string;
-  data: {
-    $id: string;
-    totalExecutionReport: number; // total order execution reports
-    totalTrade:           number; // total matched trades
-    buyTrade:             number;
-    sellTrade:            number;
-    totalValue:           number; // in crore BDT or market unit
-    buyValue:             number;
-    sellValue:            number;
-  };
-  compressed: boolean;
-  format:     string;
-  success:    boolean;
-}
-```
+### MySQL tables (auto-created via `Base.metadata.create_all()`)
 
-Called **once per broker** in parallel via `Promise.all`.  
-If `success === false`, mark broker row with `fetchError: true`.
+- `token_store` — single row (`id=1`): `access_token`, `refresh_token`,
+  `expires_at`, `user_id`, `updated_at`.
+- `broker_snapshots` — one row per `(broker_id, from_date, to_date)`, upserted:
+  `total_execution_report`, `total_trade`, `buy_trade`, `sell_trade`,
+  `total_value`, `buy_value`, `sell_value`, `fetch_error`, `fetched_at`.
+- `market_snapshots` — one row per `(stock_exchange, snapshot_date)`, upserted:
+  `market_date`, `low`, `volume`, `trade`, `value`, `gainer`, `loser`,
+  `unchanged`, `fetched_at`.
+- `pipeline_logs` — append-only run history: `run_started_at`,
+  `run_finished_at`, `status`, `duration_ms`, `brokers_ok`, `brokers_failed`,
+  `market_ok`, `error_message`.
 
-### Endpoint 2 — Market Aggregated Trade Info
+### Scheduler (`app/scheduler/jobs.py`)
 
-```
-GET /api/indexes/{stockExchange}/market-trade-info
-Headers:
-  Authorization: Bearer <JWT>
-```
+`BackgroundScheduler` (timezone = `APP_TIMEZONE`) runs `run_pipeline()`:
+- once immediately on app startup, and
+- daily via `CronTrigger` at `SCHEDULED_TIME` (job id `daily_pipeline`,
+  `misfire_grace_time=3600`).
 
-**Response:**
-```ts
-interface MarketTradeInfoApiResponse {
-  $id: string;
-  filter: { $id: string };
-  data: {
-    $id:       string;
-    date:      string;  // ISO datetime
-    low:       number;
-    volume:    number;  // total market volume (shares)
-    trade:     number;  // total market trades
-    value:     number;  // total market value
-    gainer:    number;  // count of gaining scripts
-    loser:     number;
-    unchanged: number;
-  };
-  compressed: boolean;
-  format:     string;
-  success:    boolean;
-}
-```
+### Internal endpoints (`app/routers/internal.py`, prefix `/api/internal`)
 
-Called **once** per stock exchange selection.
+- `GET /api/internal/broker-data` → `BrokerDataResponse` — most recent
+  snapshot per broker (15 entries, `app/config_data/brokers.py` order). Brokers
+  with no snapshot yet return `fetchError: true` + zeroed fields.
+- `GET /api/internal/market-data` → `MarketDataResponse` — most recent snapshot
+  for `DEFAULT_STOCK_EXCHANGE`, or `{ success: false, market: null }` if none.
+- `GET /api/internal/token-status` → token validity, `expiresAt`,
+  `nextScheduledRun` (from the scheduler), and the most recent `pipeline_logs` row.
+- `POST /api/internal/trigger-pipeline` → runs `run_pipeline()` in the
+  background, returns `{ "triggered": true }` (manual/testing use).
+
+> Important: `app/config_data/brokers.py` must be kept in sync with
+> `src/config/brokers.ts` (same broker IDs/labels, same order).
+
+See `backend/README.md` for setup/run instructions.
 
 ---
 
@@ -236,6 +247,35 @@ export interface DashboardData {
   loading:       boolean;
   error:         string | null;
 }
+
+// Raw shapes returned by the internal backend endpoints
+export interface BrokerRowApi {
+  brokerId:             string;
+  label:                string;
+  fetchError:           boolean;
+  totalExecutionReport: number;
+  totalTrade:           number;
+  buyTrade:             number;
+  sellTrade:            number;
+  totalValue:           number;
+  buyValue:             number;
+  sellValue:            number;
+}
+
+export interface BrokerDataResponse {
+  success:   boolean;
+  fromDate:  string;
+  toDate:    string;
+  fetchedAt: string | null;
+  brokers:   BrokerRowApi[];
+}
+
+export interface MarketDataResponse {
+  success:       boolean;
+  stockExchange: string;
+  fetchedAt:     string | null;
+  market:        MarketRow | null;
+}
 ```
 
 ---
@@ -271,6 +311,14 @@ Inputs:
 - `toDate` — date picker, default today
 - `stockExchange` — text input or select, default `"DSE"`
 - **Fetch** button → triggers `useDashboardData` reload
+
+> **Known v1 limitation**: the internal endpoints always serve the latest
+> cached snapshot (effectively "today"), regardless of the selected
+> `fromDate`/`toDate`/`stockExchange`. `FilterBar` remains visible and the
+> **Fetch** button still triggers a reload, but changing the filter values has
+> no effect on the data returned. Date-range/exchange-aware querying would
+> require the backend to store and serve historical snapshots per filter
+> combination — out of scope for v1.
 
 ### `ComparisonTable`
 
@@ -314,12 +362,22 @@ Tooltip: absolute value + share %
 function useDashboardData(params: DashboardParams): DashboardData
 
 // Internal flow:
-// 1. Promise.all → fetch endpoint 1 for each broker in BROKERS
-// 2. fetch endpoint 2 for stockExchange
-// 3. Map raw API responses → BrokerRow[] (with fetchError flag)
-// 4. Compute aggregateRow
-// 5. Compute per-row derived share metrics against marketRow
+// 1. Promise.all → fetchInternalBrokerData() + fetchInternalMarketData()
+//    (each call wrapped in .catch(() => null) so one failure doesn't sink the other)
+// 2. If broker response present, map BrokerRowApi[] -> BrokerRow[]
+//    (tradeSharePct/valueSharePct initialized to 0); else fall back to
+//    BROKERS from config/brokers.ts with fetchError: true and zeroed data,
+//    and set an error message ("Broker data unavailable — internal API unreachable.")
+// 3. If market response has `market`, use it as marketRow; else marketRow = null
+//    and set error = 'Market data unavailable — share % disabled.'
+// 4. Compute aggregateRow (sums across brokerRows)
+// 5. Compute per-row + aggregate derived share metrics against marketRow
+//    (skipped/0 if marketRow is null)
 // 6. Return { brokerRows, aggregateRow, marketRow, loading, error }
+//
+// `params` (fromDate/toDate/stockExchange) are accepted for the FilterBar's
+// sake but have no effect on which data is returned — see the FilterBar
+// "Known v1 limitation" note above.
 ```
 
 ---
@@ -328,11 +386,15 @@ function useDashboardData(params: DashboardParams): DashboardData
 
 | Scenario | Behaviour |
 |----------|-----------|
-| Single broker 4xx/5xx | `fetchError: true` on that row; rest continue |
-| All brokers fail | Full error state + retry button |
-| Market endpoint fails | Banner warning; share % columns show `N/A` |
-| `success: false` in body | Treat as fetch error |
-| 401 on any call | Single refresh-and-retry; on repeated failure clear session and show login screen |
+| `/api/internal/broker-data` unreachable or errors | All `brokerRows` get `fetchError: true` + zeroed data (from `config/brokers.ts`); `error` set |
+| Individual broker has no snapshot yet | That row gets `fetchError: true` + zeroed data; rest continue |
+| `/api/internal/market-data` unreachable, errors, or `market: null` | `marketRow = null`; banner warning; share % columns show `N/A` |
+| `success: false` in either internal response | Treated as unavailable per above |
+
+Auth/refresh/MFA failures against the **external** API are handled entirely
+inside the backend pipeline (see `pipeline_logs` / `/api/internal/token-status`)
+and never surface as frontend-visible auth errors — the frontend simply sees
+stale or missing snapshot data until the next successful pipeline run.
 
 ---
 
@@ -340,25 +402,25 @@ function useDashboardData(params: DashboardParams): DashboardData
 
 | Item | Type | Location |
 |------|------|----------|
-| Broker IDs + labels | Hardcoded | `config/brokers.ts` |
-| Base URL | Hardcoded | `config/api.ts` |
-| Session (access/refresh token) | Runtime, from `/api/login` | `services/tokenStorage.ts` (localStorage) |
-| Token refresh skew | Hardcoded const | `config/api.ts` → `TOKEN_REFRESH_SKEW_MS` |
-| Market share threshold | Hardcoded const | `config/api.ts` |
-| Date range | UI-configurable | `FilterBar` |
-| Stock Exchange | UI-configurable | `FilterBar` |
+| Broker IDs + labels (frontend) | Hardcoded | `src/config/brokers.ts` |
+| Broker IDs + labels (backend) | Hardcoded, must mirror frontend | `backend/app/config_data/brokers.py` |
+| Internal endpoint paths | Hardcoded | `src/config/api.ts` |
+| Market share threshold | Hardcoded const | `src/config/api.ts` |
+| External API base URL, service-account credentials, schedule, DB connection | Env vars | `backend/.env` |
+| Date range / Stock Exchange | UI-configurable, but no effect on data (v1) | `FilterBar` |
 
 ---
 
 ## Setup
 
+### Frontend
+
 ```bash
-npm create vite@latest broker-dashboard -- --template react-ts
-cd broker-dashboard
-npm install recharts axios tailwindcss @tailwindcss/vite
+npm install
+npm run dev
 ```
 
-**`vite.config.ts`:**
+**`vite.config.ts`** proxies internal API calls to the FastAPI backend in dev:
 ```ts
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -368,35 +430,56 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
-      '/api': {
-        target: 'https://uat.xfltrade.com:20121',
+      '/api/internal': {
+        target: 'http://localhost:8000',
         changeOrigin: true,
-        secure: false,
       }
     }
   }
 })
 ```
 
-> With proxy active, set `BASE_URL = ""` in `config/api.ts` for dev.  
-> For prod build, set `BASE_URL = "https://uat.xfltrade.com:20121"` or inject via env.
+No `.env.local` is needed by the frontend — it holds no credentials or tokens.
 
-No `.env.local` needed for auth — sign in via the login screen; the session
-(access + refresh token) is obtained from `/api/login` and persisted/renewed
-automatically (see "Authentication Flow").
+### Backend
 
 ```bash
-npm run dev
+cd backend
+python -m venv .venv
+.venv\Scripts\activate     # Windows
+pip install -r requirements.txt
+copy .env.example .env     # then fill in credentials/DB connection
+uvicorn app.main:app --reload --port 8000
 ```
+
+On startup the backend creates its MySQL tables (if missing), runs the pipeline
+once immediately, and schedules the daily run at `SCHEDULED_TIME`. See
+`backend/README.md` for full details.
+
+### Production
+
+- Frontend: `npm run build`, served by nginx (`dashboard.conf`).
+- Backend: run `uvicorn` (or behind a process manager) on `127.0.0.1:8000`.
+- nginx proxies `location /api/internal/` to the backend; everything else is
+  served from the built frontend (`try_files ... /index.html`).
 
 ---
 
 ## Key Notes
 
-- `$id` fields in all responses are serialization artifacts — ignore them, do not map to UI.
-- `date: "0001-01-01T00:00:00"` in market response = server returning default when no date filter applies to endpoint 2 — display as `"—"` in UI.
-- `value` in market response appears to be in a different unit than broker `totalValue` — verify units with backend before computing share % (may need a multiplier).
-- Endpoint 2 takes **no** `X-BrokerId` header — only `Authorization: Bearer`. Do not send it.
+These notes apply to the **external broker API** as consumed by
+`backend/app/services/external_api.py`:
+
+- `$id` fields in all external responses are serialization artifacts — ignored
+  by the backend, never mapped to the internal schemas.
+- `date: "0001-01-01T00:00:00"` in the market response = server returning a
+  default when no date filter applies — stored as-is in `market_snapshots.market_date`;
+  the frontend's `MarketRow.date` should display `"—"` for this value.
+- `value` in the market response appears to be in a different unit than broker
+  `totalValue` — verify units before relying on `tradeSharePct`/`valueSharePct`
+  (may need a multiplier in the frontend's share calculation).
+- The market-trade-info endpoint takes **no** `X-BrokerId` header — only
+  `Authorization: Bearer`. `external_api.fetch_market_trade_info` must not send it.
 
 ---
 

@@ -10,6 +10,14 @@ dist/
 # Environment
 .env.local
 .env.*.local
+backend/.env
+
+# Python
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.venv/
+backend/venv/
+*.pyc
 
 # Editor
 .vscode/

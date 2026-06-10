@@ -6,10 +6,9 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
-      '/api': {
-        target: 'https://uat.xfltrade.com:20121',
+      '/api/internal': {
+        target: 'http://localhost:8000',
         changeOrigin: true,
-        secure: false,
       }
     }
   }

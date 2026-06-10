@@ -1,39 +1,31 @@
-// Raw API response — Endpoint 1
-export interface BrokerSummaryApiResponse {
-  $id: string;
-  data: {
-    $id: string;
-    totalExecutionReport: number;
-    totalTrade:           number;
-    buyTrade:             number;
-    sellTrade:            number;
-    totalValue:           number;
-    buyValue:             number;
-    sellValue:            number;
-  };
-  compressed: boolean;
-  format:     string;
-  success:    boolean;
+// Internal backend API response — broker snapshots
+export interface BrokerRowApi {
+  brokerId:             string;
+  label:                string;
+  fetchError:           boolean;
+  totalExecutionReport: number;
+  totalTrade:           number;
+  buyTrade:             number;
+  sellTrade:            number;
+  totalValue:           number;
+  buyValue:             number;
+  sellValue:            number;
 }
 
-// Raw API response — Endpoint 2
-export interface MarketTradeInfoApiResponse {
-  $id: string;
-  filter: { $id: string };
-  data: {
-    $id:       string;
-    date:      string;
-    low:       number;
-    volume:    number;
-    trade:     number;
-    value:     number;
-    gainer:    number;
-    loser:     number;
-    unchanged: number;
-  };
-  compressed: boolean;
-  format:     string;
-  success:    boolean;
+export interface BrokerDataResponse {
+  success:   boolean;
+  fromDate:  string;
+  toDate:    string;
+  fetchedAt: string | null;
+  brokers:   BrokerRowApi[];
+}
+
+// Internal backend API response — market snapshot
+export interface MarketDataResponse {
+  success:       boolean;
+  stockExchange: string;
+  fetchedAt:     string | null;
+  market:        MarketRow | null;
 }
 
 // Domain types
