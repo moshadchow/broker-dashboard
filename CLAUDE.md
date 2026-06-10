@@ -10,7 +10,14 @@ Authentication and data fetching against the external broker API
 backend (`/backend`). The backend authenticates with a service account on a
 schedule, caches the latest broker/market data in MySQL, and serves it to the
 frontend via internal endpoints. The frontend never talks to the external API
-or handles JWTs — manual login is disabled (stub UI only).
+or handles the auto-credential pipeline's tokens directly.
+
+Separately, the app has a **human-facing admin panel** (JWT-based login,
+`admin`/`user` roles, broker + user management — see "Admin Panel: Auth &
+User Management" below). This is a completely independent auth system from
+the auto-credential pipeline above; it does not touch `token_store`,
+`broker_snapshots`, `market_snapshots`, `pipeline_logs`, or
+`config_data/brokers.py`.
 
 ---
 
@@ -32,38 +39,61 @@ or handles JWTs — manual login is disabled (stub UI only).
 ```
 src/
 ├── config/
-│   ├── brokers.ts          # Static XBrokerId list
-│   └── api.ts              # Base URL, internal endpoint paths, thresholds
+│   ├── brokers.ts          # Static XBrokerId list (pipeline brokers, separate from admin `brokers` table)
+│   └── api.ts              # Base URL, endpoint paths, thresholds
 ├── services/
-│   └── apiService.ts       # Axios calls to internal backend endpoints
+│   ├── apiService.ts       # Calls to /api/internal/* (via httpClient)
+│   ├── httpClient.ts        # Shared axios instance: attaches Bearer token, refreshes on 401
+│   ├── tokenStorage.ts      # Persists { accessToken, refreshToken } in localStorage
+│   ├── authService.ts       # login/logout/changePassword/fetchMe (/auth/*)
+│   └── adminService.ts      # Admin CRUD for brokers/users (/admin/*)
 ├── hooks/
 │   └── useDashboardData.ts # Fetches internal endpoints + computes aggregation
+├── context/
+│   └── AuthContext.tsx     # AuthProvider/useAuth — user, status, login/logout/refreshUser
 ├── components/
-│   ├── Login.tsx           # Disabled login stub ("Auto-auth active")
-│   ├── Dashboard.tsx       # Root layout
+│   ├── ProtectedRoute.tsx  # Route guard (auth + optional role check)
+│   ├── Login.tsx           # Real login form (email/password)
+│   ├── Profile.tsx         # Self-service change-password page
+│   ├── Dashboard.tsx       # Main dashboard layout (routed at /dashboard)
 │   ├── FilterBar.tsx       # Date range + stock exchange inputs (display only)
 │   ├── ComparisonTable.tsx # Data table: per-broker + aggregate vs market
-│   └── ComparisonChart.tsx # Recharts ComposedChart
+│   ├── ComparisonChart.tsx # Recharts ComposedChart
+│   └── admin/
+│       ├── AdminLayout.tsx       # Admin shell: header + sidebar nav + <Outlet/>
+│       ├── BrokerManagement.tsx  # CRUD UI for admin `brokers` table
+│       └── UserManagement.tsx    # CRUD UI for `users` table (role/broker assignment)
 ├── types/
-│   └── index.ts            # All shared dashboard TS interfaces
-└── App.tsx                 # Renders Login (stub) + Dashboard directly
+│   ├── index.ts            # Dashboard TS interfaces
+│   └── auth.ts             # Admin-panel auth/user/broker TS interfaces
+└── App.tsx                 # BrowserRouter + AuthProvider + route table
 
 backend/
 ├── app/
-│   ├── main.py              # FastAPI app, lifespan (DB init + scheduler), CORS
-│   ├── config.py            # Settings (.env)
+│   ├── main.py              # FastAPI app, lifespan (DB init + seeding + scheduler), CORS, routers
+│   ├── config.py            # Settings (.env), incl. JWT settings
 │   ├── db/                  # SQLAlchemy engine/session
-│   ├── models/              # token_store, broker_snapshots, market_snapshots, pipeline_logs
-│   ├── schemas/              # Pydantic response models for internal endpoints
+│   ├── models/              # token_store, broker_snapshots, market_snapshots, pipeline_logs,
+│   │                         # + admin panel: user, broker, token_blacklist
+│   ├── schemas/              # Pydantic models: internal endpoints + auth/user/admin_broker
 │   ├── config_data/brokers.py  # BROKERS list — keep in sync with src/config/brokers.ts
+│   ├── dependencies/auth.py # get_current_user, require_admin (JWT + blacklist checks)
 │   ├── services/
 │   │   ├── external_api.py  # httpx calls to external broker API
-│   │   ├── auth_service.py  # auth()/refresh + token_store CRUD
+│   │   ├── auth_service.py  # auth()/refresh + token_store CRUD (pipeline service account)
 │   │   ├── fetch_service.py # fetch_all(): 15 brokers + market
 │   │   ├── store_service.py # upserts into snapshot tables + pipeline_logs
-│   │   └── pipeline.py      # run_pipeline(): orchestration
+│   │   ├── pipeline.py      # run_pipeline(): orchestration
+│   │   ├── password_service.py # bcrypt hash/verify (admin panel)
+│   │   ├── jwt_service.py      # access/refresh token create + decode (admin panel)
+│   │   ├── user_service.py     # admin `users` table CRUD + seed_default_admin
+│   │   └── broker_service.py   # admin `brokers` table CRUD + seed_brokers
 │   ├── scheduler/jobs.py    # APScheduler: startup run + daily cron
-│   └── routers/internal.py  # /api/internal/* endpoints
+│   └── routers/
+│       ├── internal.py      # /api/internal/* endpoints (pipeline data, unauthenticated)
+│       ├── auth.py          # /auth/* — login, refresh, logout, change-password, me
+│       ├── admin_brokers.py # /admin/brokers/* — admin-only broker CRUD
+│       └── admin_users.py   # /admin/users/* — admin-only user CRUD
 └── requirements.txt
 ```
 
@@ -98,15 +128,29 @@ export const ENDPOINTS = {
   internalBrokerData:  '/api/internal/broker-data',
   internalMarketData:  '/api/internal/market-data',
   internalTokenStatus: '/api/internal/token-status',
+
+  login:          '/auth/login',
+  refresh:        '/auth/refresh',
+  logout:         '/auth/logout',
+  changePassword: '/auth/change-password',
+  me:             '/auth/me',
+
+  adminBrokers: '/admin/brokers/',
+  adminUsers:   '/admin/users/',
 };
+
+// adminBrokerById(brokerId) -> `/admin/brokers/${brokerId}`
+// adminUserById(id)         -> `/admin/users/${id}`
 
 // Threshold for market-share color coding (%)
 export const MARKET_SHARE_THRESHOLD = 5;
 ```
 
-> The frontend holds no JWT and never calls the external broker API directly.
-> All authentication and external-API access happens server-side in `/backend`
-> (see "Backend: Auto-Credential Pipeline" below).
+> The frontend never calls the external broker API directly. Auto-credential
+> pipeline auth/external-API access happens server-side in `/backend` (see
+> "Backend: Auto-Credential Pipeline" below). Admin-panel auth (human users)
+> uses JWTs issued by `/auth/*` and stored in `localStorage` via
+> `services/tokenStorage.ts` — see "Admin Panel: Auth & User Management".
 
 ---
 
@@ -189,6 +233,74 @@ and skipped (MFA is assumed disabled for the service account).
 > `src/config/brokers.ts` (same broker IDs/labels, same order).
 
 See `backend/README.md` for setup/run instructions.
+
+---
+
+## Admin Panel: Auth & User Management
+
+A separate, human-facing JWT auth system for the dashboard itself —
+independent from the auto-credential pipeline above. Roles: `admin` (manages
+brokers + users) and `user` (views `/dashboard`, can change their own
+password).
+
+### Configuration (`backend/.env`)
+
+| Var | Purpose |
+|-----|---------|
+| `JWT_SECRET_KEY` | HMAC signing key for access/refresh tokens (required, no default) |
+| `JWT_ALGORITHM` | Default `HS256` |
+| `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | Default `30` |
+| `JWT_REFRESH_TOKEN_EXPIRE_DAYS` | Default `7` |
+
+### MySQL tables (auto-created via `Base.metadata.create_all()`)
+
+- `brokers` — `broker_id` (PK, e.g. `"SNM"`), `broker_label`, timestamps.
+  Independent from `app/config_data/brokers.py` / `src/config/brokers.ts`
+  (the pipeline's hardcoded 15-broker list); seeded once from those labels on
+  first startup (`broker_service.seed_brokers`), editable thereafter.
+- `users` — `id`, `email` (unique), `password_hash` (bcrypt via passlib),
+  `role` (`admin`/`user`), `broker_id` (nullable FK → `brokers.broker_id`),
+  `is_active`, `must_change_password`, timestamps.
+- `token_blacklist` — `id`, `jti` (unique), `expires_at`. Refresh-token `jti`s
+  are inserted here on logout; `get_current_user`/`/auth/refresh` reject any
+  token whose `jti` appears here.
+
+### Seeding (`app/main.py` lifespan, after `create_all()`)
+
+- `broker_service.seed_brokers()` — no-op if `brokers` is non-empty.
+- `user_service.seed_default_admin()` — no-op if `users` is non-empty;
+  otherwise creates `admin@xfl.com` / `Admin@1234`, `role="admin"`,
+  `must_change_password=True`. **Change this password after first login.**
+
+### Endpoints
+
+- `POST /auth/login` — `{ email, password }` → `{ accessToken, refreshToken, tokenType }`.
+- `POST /auth/refresh` — `{ refreshToken }` → new token pair (rejects blacklisted/expired).
+- `POST /auth/logout` — `{ refreshToken }` → blacklists its `jti`.
+- `POST /auth/change-password` — auth required; `{ currentPassword, newPassword }`,
+  clears `must_change_password`.
+- `GET /auth/me` — auth required → `{ id, email, role, brokerId, mustChangePassword }`.
+- `GET/POST /admin/brokers/`, `PUT/DELETE /admin/brokers/{broker_id}` — admin only.
+  Delete is blocked (409) if a user references the broker.
+- `GET/POST /admin/users/`, `PUT/DELETE /admin/users/{id}` — admin only.
+  Delete is blocked (400) for `current_user.id == id` (no self-deletion).
+
+### Frontend
+
+- `services/tokenStorage.ts` persists `{ accessToken, refreshToken }` in
+  `localStorage`. `services/httpClient.ts` is a shared axios instance used by
+  `apiService.ts`/`authService.ts`/`adminService.ts`: it attaches
+  `Authorization: Bearer <accessToken>` to every request and, on a `401`,
+  calls `/auth/refresh` once and retries — clearing storage and redirecting to
+  `/login` if that also fails.
+- `context/AuthContext.tsx` (`AuthProvider`/`useAuth`) hydrates `user` via
+  `/auth/me` on mount if a token exists; exposes `login`/`logout`/`refreshUser`.
+- `components/ProtectedRoute.tsx` redirects to `/login` if unauthenticated, or
+  to `/dashboard`/`/admin` if the user's role isn't in the route's `roles` list.
+- Routes (`src/App.tsx`): `/login` (public), `/` (role-based redirect),
+  `/dashboard` (`user`/`admin`), `/profile` (change password, any role),
+  `/admin` (`admin` only) → `AdminLayout` with `/admin/brokers` and
+  `/admin/users`.
 
 ---
 
@@ -420,7 +532,7 @@ npm install
 npm run dev
 ```
 
-**`vite.config.ts`** proxies internal API calls to the FastAPI backend in dev:
+**`vite.config.ts`** proxies API calls to the FastAPI backend in dev:
 ```ts
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -433,13 +545,22 @@ export default defineConfig({
       '/api/internal': {
         target: 'http://localhost:8000',
         changeOrigin: true,
+      },
+      '/auth': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/admin': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
       }
     }
   }
 })
 ```
 
-No `.env.local` is needed by the frontend — it holds no credentials or tokens.
+No `.env.local` is needed by the frontend — admin-panel JWTs are stored in
+`localStorage` (see "Admin Panel: Auth & User Management"), not in env files.
 
 ### Backend
 
@@ -460,8 +581,10 @@ once immediately, and schedules the daily run at `SCHEDULED_TIME`. See
 
 - Frontend: `npm run build`, served by nginx (`dashboard.conf`).
 - Backend: run `uvicorn` (or behind a process manager) on `127.0.0.1:8000`.
-- nginx proxies `location /api/internal/` to the backend; everything else is
-  served from the built frontend (`try_files ... /index.html`).
+- nginx proxies `location /api/internal/`, `/auth/`, and `/admin/` to the
+  backend; everything else is served from the built frontend
+  (`try_files ... /index.html`), so client-side routes like `/admin/brokers`
+  fall through to `index.html` while API calls to `/admin/*` reach FastAPI.
 
 ---
 

@@ -6,9 +6,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.db.base import Base
-from app.db.session import engine
-from app.routers import internal
+from app.db.session import SessionLocal, engine
+from app.routers import admin_brokers, admin_users, auth, internal
 from app.scheduler.jobs import start_scheduler, stop_scheduler
+from app.services import broker_service, user_service
 
 logging.basicConfig(level=logging.INFO)
 
@@ -16,6 +17,14 @@ logging.basicConfig(level=logging.INFO)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+
+    db = SessionLocal()
+    try:
+        broker_service.seed_brokers(db)
+        user_service.seed_default_admin(db)
+    finally:
+        db.close()
+
     start_scheduler()
     yield
     stop_scheduler()
@@ -32,3 +41,6 @@ app.add_middleware(
 )
 
 app.include_router(internal.router)
+app.include_router(auth.router)
+app.include_router(admin_brokers.router)
+app.include_router(admin_users.router)
