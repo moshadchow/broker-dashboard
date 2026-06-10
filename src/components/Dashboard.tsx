@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react';
-import { useAuth } from '../context/AuthContext';
 import { useDashboardData } from '../hooks/useDashboardData';
 import FilterBar from './FilterBar';
 import ComparisonTable from './ComparisonTable';
@@ -11,7 +10,6 @@ function todayISO(): string {
 }
 
 export default function Dashboard() {
-  const { user, logout } = useAuth();
   const [params, setParams] = useState<DashboardParams>({
     fromDate:      todayISO(),
     toDate:        todayISO(),
@@ -46,13 +44,9 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-3 text-sm">
-          {user && <span className="text-gray-300">{user.displayName || user.email}</span>}
-          <button
-            onClick={logout}
-            className="px-3 py-1.5 bg-gray-700 rounded-lg text-xs font-semibold hover:bg-gray-600"
-          >
-            Sign out
-          </button>
+          <span className="px-3 py-1.5 bg-gray-700 rounded-lg text-xs font-semibold text-gray-300">
+            Auto-Auth Pipeline
+          </span>
         </div>
       </header>
 

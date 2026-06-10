@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BROKERS } from '../config/brokers';
-import { fetchBrokerSummary, fetchMarketTradeInfo } from '../services/apiService';
+import { fetchInternalBrokerData, fetchInternalMarketData } from '../services/apiService';
 import type {
   DashboardParams,
   DashboardData,
@@ -34,40 +34,28 @@ export function useDashboardData(params: DashboardParams): DashboardData {
     async function load() {
       setState(s => ({ ...s, loading: true, error: null }));
 
-      // Parallel: all brokers + market
-      const [brokerResults, marketResult] = await Promise.all([
-        Promise.allSettled(
-          BROKERS.map(b =>
-            fetchBrokerSummary(b.id, params.fromDate, params.toDate)
-              .then(r => ({ broker: b, data: r.data }))
-          )
-        ),
-        fetchMarketTradeInfo(params.stockExchange).catch(() => null),
+      const [brokerResp, marketResp] = await Promise.all([
+        fetchInternalBrokerData().catch(() => null),
+        fetchInternalMarketData().catch(() => null),
       ]);
 
       if (cancelled) return;
 
       // Map broker results → BrokerRow[]
-      const brokerRows: BrokerRow[] = brokerResults.map((result, i) => {
-        if (result.status === 'fulfilled') {
-          return {
-            brokerId:   BROKERS[i].id,
-            label:      BROKERS[i].label,
-            fetchError: false,
+      const brokerRows: BrokerRow[] = brokerResp
+        ? brokerResp.brokers.map(b => ({
+            ...b,
             tradeSharePct: 0,
             valueSharePct: 0,
-            ...result.value.data,
-          };
-        }
-        return {
-          brokerId:   BROKERS[i].id,
-          label:      BROKERS[i].label,
-          fetchError: true,
-          tradeSharePct: 0,
-          valueSharePct: 0,
-          ...ZERO_BROKER_DATA,
-        };
-      });
+          }))
+        : BROKERS.map(b => ({
+            brokerId:   b.id,
+            label:      b.label,
+            fetchError: true,
+            tradeSharePct: 0,
+            valueSharePct: 0,
+            ...ZERO_BROKER_DATA,
+          }));
 
       // Aggregate
       const aggregateRow: AggregateRow = {
@@ -86,13 +74,9 @@ export function useDashboardData(params: DashboardParams): DashboardData {
       let marketRow: MarketRow | null = null;
       let error: string | null = null;
 
-      if (marketResult) {
-        const d = marketResult.data;
-        marketRow = {
-          date: d.date, low: d.low, volume: d.volume,
-          trade: d.trade, value: d.value,
-          gainer: d.gainer, loser: d.loser, unchanged: d.unchanged,
-        };
+      if (marketResp?.market) {
+        const d = marketResp.market;
+        marketRow = { ...d };
         // Compute share pcts
         if (d.trade > 0) {
           brokerRows.forEach(r => { r.tradeSharePct = r.totalTrade / d.trade * 100; });
@@ -104,6 +88,10 @@ export function useDashboardData(params: DashboardParams): DashboardData {
         }
       } else {
         error = 'Market data unavailable — share % disabled.';
+      }
+
+      if (!brokerResp) {
+        error = 'Broker data unavailable — internal API unreachable.';
       }
 
       setState({ brokerRows, aggregateRow, marketRow, loading: false, error });
