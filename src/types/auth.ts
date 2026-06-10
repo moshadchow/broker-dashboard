@@ -1,63 +1,74 @@
-export interface LoginRequest {
-  loginId:  string;
-  password: string;
-  deviceId: string;
-  mfaKey:   string;
-  mfaCode:  string;
-  appType:  number;
+export type UserRole = 'admin' | 'user';
+
+export interface User {
+  id:                 number;
+  email:              string;
+  role:               UserRole;
+  brokerId:           string | null;
+  isActive:           boolean;
+  mustChangePassword: boolean;
 }
 
-export interface RefreshTokenRequest {
+export interface AdminUser extends User {
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminBroker {
+  brokerId:    string;
+  brokerLabel: string;
+  createdAt:   string;
+  updatedAt:   string;
+}
+
+export interface LoginRequest {
+  email:    string;
+  password: string;
+}
+
+export interface TokenResponse {
   accessToken:  string;
   refreshToken: string;
-  deviceId:     string;
+  tokenType:    string;
 }
 
-export interface AuthData {
-  userId:                       string;
-  accessToken:                  string;
-  refreshToken:                 string;
-  accessTokenExpiryDateTimeUtc: string;
-  success:                      boolean;
-  errorMessage:                 string | null;
-  displayName:                  string;
-  email:                        string;
-  isAuthorised:                 boolean;
-  isAuthenticated:              boolean;
-  serverDateTimeUtc:            string;
-  isMfaRequired:                boolean;
-  mfaKey:                       string | null;
-  passwordChangeRequired:       boolean;
+export interface RefreshRequest {
+  refreshToken: string;
 }
 
-interface AuthApiEnvelope {
-  data:         AuthData;
-  success:      boolean;
-  errorMessage: string | null;
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword:     string;
 }
 
-export type LoginApiResponse = AuthApiEnvelope;
-export type RefreshTokenApiResponse = AuthApiEnvelope;
-
-// Persisted in storage to restore the session and drive proactive refresh
-export interface StoredSession {
-  userId:                       string;
-  accessToken:                  string;
-  refreshToken:                 string;
-  accessTokenExpiryDateTimeUtc: string;
-  displayName:                  string;
-  email:                        string;
+export interface UserCreateInput {
+  email:    string;
+  password: string;
+  role:     UserRole;
+  brokerId: string | null;
 }
 
-export type AuthStatus =
-  | 'checking'
-  | 'unauthenticated'
-  | 'mfa-required'
-  | 'authenticated';
+export interface UserUpdateInput {
+  email?:       string;
+  brokerId?:    string | null;
+  brokerIdSet?: boolean;
+  isActive?:    boolean;
+  role?:        UserRole;
+}
+
+export interface BrokerCreateInput {
+  brokerId:    string;
+  brokerLabel: string;
+}
+
+export interface BrokerUpdateInput {
+  brokerLabel: string;
+}
+
+export type AuthStatus = 'checking' | 'unauthenticated' | 'authenticated';
 
 export interface AuthState {
-  status:  AuthStatus;
-  user:    { userId: string; displayName: string; email: string } | null;
-  mfaKey:  string | null;
-  error:   string | null;
+  status: AuthStatus;
+  user:   User | null;
+  error:  string | null;
 }

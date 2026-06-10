@@ -37,6 +37,35 @@ On startup the pipeline runs once immediately, then daily at `SCHEDULED_TIME`
 - `GET /api/internal/token-status` — token validity, last update, next scheduled run
 - `POST /api/internal/trigger-pipeline` — manually run the pipeline (useful for testing)
 
+### Admin panel auth
+
+JWT-based login for human users (separate from the auto-credential service
+account above):
+
+- `POST /auth/login` — email + password → access + refresh tokens
+- `POST /auth/refresh` — refresh access token
+- `POST /auth/logout` — blacklist the refresh token
+- `POST /auth/change-password` — authenticated user changes own password
+- `GET /auth/me` — current user profile
+- `POST|GET|PUT|DELETE /admin/brokers[/{broker_id}]` — admin-only broker CRUD
+- `POST|GET|PUT|DELETE /admin/users[/{id}]` — admin-only user CRUD
+
+Configure `JWT_SECRET_KEY` (and optionally `JWT_ALGORITHM`,
+`JWT_ACCESS_TOKEN_EXPIRE_MINUTES`, `JWT_REFRESH_TOKEN_EXPIRE_DAYS`) in `.env`.
+
+On first startup, a default admin account is seeded if the `users` table is
+empty:
+
+- email: `admin@xfl.com`
+- password: `Admin@1234`
+- role: `admin`, with `mustChangePassword: true` — change it via
+  `/auth/change-password` (or the Profile page) immediately after first login.
+
+The `brokers` table (used for user-broker assignment in the admin panel) is
+also seeded from `app/config_data/brokers.py` if empty. It is independent from
+the auto-credential pipeline's broker list — editing it via the admin panel
+does not affect `/api/internal/*`.
+
 ## Notes
 
 - `JWT_ACCESS_TOKEN` / `JWT_REFRESH_TOKEN` in `.env` are placeholders only and are

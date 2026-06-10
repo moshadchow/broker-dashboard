@@ -1,5 +1,7 @@
 import { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useDashboardData } from '../hooks/useDashboardData';
+import { useAuth } from '../context/AuthContext';
 import FilterBar from './FilterBar';
 import ComparisonTable from './ComparisonTable';
 import ComparisonChart from './ComparisonChart';
@@ -10,6 +12,7 @@ function todayISO(): string {
 }
 
 export default function Dashboard() {
+  const { user, logout } = useAuth();
   const [params, setParams] = useState<DashboardParams>({
     fromDate:      todayISO(),
     toDate:        todayISO(),
@@ -47,6 +50,21 @@ export default function Dashboard() {
           <span className="px-3 py-1.5 bg-gray-700 rounded-lg text-xs font-semibold text-gray-300">
             Auto-Auth Pipeline
           </span>
+          <span className="px-3 py-1.5 bg-gray-700 rounded-lg text-xs font-semibold text-gray-300">
+            {user?.email}
+          </span>
+          <Link
+            to="/profile"
+            className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs font-semibold text-gray-300 transition-colors"
+          >
+            Profile
+          </Link>
+          <button
+            onClick={() => logout()}
+            className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs font-semibold text-gray-300 transition-colors"
+          >
+            Sign out
+          </button>
         </div>
       </header>
 
