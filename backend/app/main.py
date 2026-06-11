@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
-from app.routers import admin_brokers, admin_users, auth, internal
+from app.routers import admin_brokers, admin_users, auth, dashboard, internal
 from app.scheduler.jobs import start_scheduler, stop_scheduler
 from app.services import broker_service, user_service
 
@@ -41,6 +41,7 @@ app.add_middleware(
 )
 
 app.include_router(internal.router)
+app.include_router(dashboard.router)
 app.include_router(auth.router)
 app.include_router(admin_brokers.router)
 app.include_router(admin_users.router)
