@@ -1,14 +1,19 @@
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useDashboardData } from '../hooks/useDashboardData';
+import { useTrendData } from '../hooks/useTrendData';
 import { useAuth } from '../context/AuthContext';
 import FilterBar from './FilterBar';
 import ComparisonTable from './ComparisonTable';
-import ComparisonChart from './ComparisonChart';
+import TrendChart from './TrendChart';
 import type { DashboardParams } from '../types';
 
 function todayISO(): string {
-  return new Date().toISOString().split('T')[0];
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 export default function Dashboard() {
@@ -29,6 +34,7 @@ export default function Dashboard() {
 
   const { brokerRows, aggregateRow, marketRow, loading, error } =
     useDashboardData(activeParams ?? params);
+  const { trend } = useTrendData(activeParams);
 
   const hasData = fetchTrigger > 0 && !loading;
   const allFailed = hasData && brokerRows.every(r => r.fetchError);
@@ -110,11 +116,7 @@ export default function Dashboard() {
               aggregateRow={aggregateRow}
               marketRow={marketRow}
             />
-            <ComparisonChart
-              brokerRows={brokerRows}
-              aggregateRow={aggregateRow}
-              marketRow={marketRow}
-            />
+            {trend && <TrendChart trend={trend} />}
           </>
         )}
 

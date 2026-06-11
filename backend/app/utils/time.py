@@ -16,10 +16,6 @@ def today_local() -> date:
     return datetime.now(app_tz()).date()
 
 
-def today_local_iso() -> str:
-    return today_local().isoformat()
-
-
 def parse_utc_iso(value: str) -> datetime:
     """Parse an ISO datetime string (e.g. accessTokenExpiryDateTimeUtc) into a tz-aware UTC datetime."""
     parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))

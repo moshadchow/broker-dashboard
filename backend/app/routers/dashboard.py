@@ -56,11 +56,11 @@ def _build_series(
             pct_of_market.append((xfl_total / market_value * 100) if market_value > 0 else 0.0)
 
     return TrendSeries(
-        own_broker=own_broker if show_own_broker else None,
+        ownBroker=own_broker if show_own_broker else None,
         xfl=xfl,
         market=market,
-        pct_of_xfl=pct_of_xfl if show_own_broker else None,
-        pct_of_market=pct_of_market,
+        pctOfXfl=pct_of_xfl if show_own_broker else None,
+        pctOfMarket=pct_of_market,
     )
 
 
@@ -81,11 +81,14 @@ def get_trend(
     ).all()
 
     by_date_broker: dict[date, dict[str, dict[str, float]]] = {}
+    own_broker_label: str | None = None
     for row in snapshot_rows:
         by_date_broker.setdefault(row.from_date, {})[row.broker_id] = {
             "trade": float(row.total_trade),
             "value": float(row.total_value),
         }
+        if row.broker_id == current_user.broker_id:
+            own_broker_label = row.broker_label
 
     market_rows = db.scalars(
         select(MarketSnapshot).where(
@@ -112,4 +115,5 @@ def get_trend(
         value=_build_series(
             dates, by_date_broker, market_by_date, "value", show_own_broker, current_user.broker_id
         ),
+        ownBrokerLabel=own_broker_label if show_own_broker else None,
     )

@@ -2,11 +2,11 @@ from pydantic import BaseModel
 
 
 class TrendSeries(BaseModel):
-    own_broker: list[float] | None = None
+    ownBroker: list[float] | None = None
     xfl: list[float]
     market: list[float]
-    pct_of_xfl: list[float] | None = None
-    pct_of_market: list[float]
+    pctOfXfl: list[float] | None = None
+    pctOfMarket: list[float]
 
 
 class TrendResponse(BaseModel):
@@ -14,3 +14,4 @@ class TrendResponse(BaseModel):
     dates: list[str]
     trades: TrendSeries
     value: TrendSeries
+    ownBrokerLabel: str | None = None

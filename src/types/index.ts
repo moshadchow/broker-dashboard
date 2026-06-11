@@ -12,12 +12,23 @@ export interface BrokerRowApi {
   sellValue:            number;
 }
 
+export interface BrokerAggregateApi {
+  totalExecutionReport: number;
+  totalTrade:           number;
+  buyTrade:             number;
+  sellTrade:            number;
+  totalValue:           number;
+  buyValue:             number;
+  sellValue:            number;
+}
+
 export interface BrokerDataResponse {
   success:   boolean;
   fromDate:  string;
   toDate:    string;
   fetchedAt: string | null;
   brokers:   BrokerRowApi[];
+  aggregate: BrokerAggregateApi;
 }
 
 // Internal backend API response — market snapshot
@@ -75,4 +86,21 @@ export interface DashboardData {
   marketRow:    MarketRow | null;
   loading:      boolean;
   error:        string | null;
+}
+
+// Internal backend API response — trend chart
+export interface TrendSeries {
+  ownBroker?:   number[];
+  xfl:          number[];
+  market:       number[];
+  pctOfXfl?:    number[];
+  pctOfMarket:  number[];
+}
+
+export interface TrendResponse {
+  success:         boolean;
+  dates:           string[];
+  trades:          TrendSeries;
+  value:           TrendSeries;
+  ownBrokerLabel?: string;
 }

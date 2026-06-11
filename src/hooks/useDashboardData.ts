@@ -35,8 +35,8 @@ export function useDashboardData(params: DashboardParams): DashboardData {
       setState(s => ({ ...s, loading: true, error: null }));
 
       const [brokerResp, marketResp] = await Promise.all([
-        fetchInternalBrokerData().catch(() => null),
-        fetchInternalMarketData().catch(() => null),
+        fetchInternalBrokerData(params.toDate).catch(() => null),
+        fetchInternalMarketData(params.toDate).catch(() => null),
       ]);
 
       if (cancelled) return;
@@ -57,18 +57,11 @@ export function useDashboardData(params: DashboardParams): DashboardData {
             ...ZERO_BROKER_DATA,
           }));
 
-      // Aggregate
-      const aggregateRow: AggregateRow = {
-        tradeSharePct: 0,
-        valueSharePct: 0,
-        totalExecutionReport: brokerRows.reduce((s, r) => s + r.totalExecutionReport, 0),
-        totalTrade:  brokerRows.reduce((s, r) => s + r.totalTrade,  0),
-        buyTrade:    brokerRows.reduce((s, r) => s + r.buyTrade,    0),
-        sellTrade:   brokerRows.reduce((s, r) => s + r.sellTrade,   0),
-        totalValue:  brokerRows.reduce((s, r) => s + r.totalValue,  0),
-        buyValue:    brokerRows.reduce((s, r) => s + r.buyValue,    0),
-        sellValue:   brokerRows.reduce((s, r) => s + r.sellValue,   0),
-      };
+      // Aggregate (XFL-wide, summed server-side across all brokers — independent of which
+      // broker rows are visible to this user)
+      const aggregateRow: AggregateRow = brokerResp
+        ? { ...brokerResp.aggregate, tradeSharePct: 0, valueSharePct: 0 }
+        : { ...ZERO_BROKER_DATA, tradeSharePct: 0, valueSharePct: 0 };
 
       // Market + derived share %
       let marketRow: MarketRow | null = null;

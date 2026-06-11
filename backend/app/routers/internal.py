@@ -1,6 +1,6 @@
-from datetime import timezone
+from datetime import date, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -13,13 +13,13 @@ from app.models.market_snapshot import MarketSnapshot
 from app.models.pipeline_log import PipelineLog
 from app.models.token_store import TokenStore
 from app.models.user import User
-from app.schemas.broker import BrokerDataResponse, BrokerRowOut
+from app.schemas.broker import BrokerAggregateOut, BrokerDataResponse, BrokerRowOut
 from app.schemas.market import MarketDataResponse, MarketRowOut
 from app.schemas.token import LastPipelineRun, TokenStatusResponse
 from app.scheduler.jobs import DAILY_JOB_ID, scheduler
 from app.services.fetch_service import ZERO_BROKER_DATA
 from app.services.pipeline import run_pipeline
-from app.utils.time import is_expiring_soon, today_local_iso
+from app.utils.time import is_expiring_soon, today_local
 
 router = APIRouter(prefix="/api/internal")
 
@@ -32,10 +32,12 @@ def _aware_utc(dt):
 
 @router.get("/broker-data", response_model=BrokerDataResponse)
 def get_broker_data(
+    toDate: date = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> BrokerDataResponse:
-    today = today_local_iso()
+    if toDate is None:
+        toDate = today_local()
     rows: list[BrokerRowOut] = []
     latest_fetched_at = None
 
@@ -44,13 +46,16 @@ def get_broker_data(
     else:
         brokers_to_show = BROKERS
 
+    snapshots_by_broker: dict[str, BrokerSnapshot] = {}
+    for snapshot in db.scalars(
+        select(BrokerSnapshot)
+        .where(BrokerSnapshot.to_date == toDate)
+        .order_by(BrokerSnapshot.fetched_at.desc())
+    ):
+        snapshots_by_broker.setdefault(snapshot.broker_id, snapshot)
+
     for broker in brokers_to_show:
-        snapshot = db.scalar(
-            select(BrokerSnapshot)
-            .where(BrokerSnapshot.broker_id == broker["id"])
-            .order_by(BrokerSnapshot.fetched_at.desc())
-            .limit(1)
-        )
+        snapshot = snapshots_by_broker.get(broker["id"])
         if snapshot is None:
             rows.append(
                 BrokerRowOut(
@@ -80,20 +85,40 @@ def get_broker_data(
             )
         )
 
+    aggregate = BrokerAggregateOut(
+        totalExecutionReport=sum(s.total_execution_report for s in snapshots_by_broker.values()),
+        totalTrade=sum(s.total_trade for s in snapshots_by_broker.values()),
+        buyTrade=sum(s.buy_trade for s in snapshots_by_broker.values()),
+        sellTrade=sum(s.sell_trade for s in snapshots_by_broker.values()),
+        totalValue=float(sum(s.total_value for s in snapshots_by_broker.values())),
+        buyValue=float(sum(s.buy_value for s in snapshots_by_broker.values())),
+        sellValue=float(sum(s.sell_value for s in snapshots_by_broker.values())),
+    )
+
     return BrokerDataResponse(
         success=True,
-        fromDate=today,
-        toDate=today,
+        fromDate=toDate.isoformat(),
+        toDate=toDate.isoformat(),
         fetchedAt=_aware_utc(latest_fetched_at),
         brokers=rows,
+        aggregate=aggregate,
     )
 
 
 @router.get("/market-data", response_model=MarketDataResponse)
-def get_market_data(db: Session = Depends(get_db)) -> MarketDataResponse:
+def get_market_data(
+    toDate: date = Query(default=None),
+    db: Session = Depends(get_db),
+) -> MarketDataResponse:
+    if toDate is None:
+        toDate = today_local()
+
     snapshot = db.scalar(
         select(MarketSnapshot)
-        .where(MarketSnapshot.stock_exchange == settings.default_stock_exchange)
+        .where(
+            MarketSnapshot.stock_exchange == settings.default_stock_exchange,
+            MarketSnapshot.snapshot_date == toDate,
+        )
         .order_by(MarketSnapshot.fetched_at.desc())
         .limit(1)
     )

@@ -8,6 +8,8 @@ export const ENDPOINTS = {
   internalMarketData:  '/api/internal/market-data',
   internalTokenStatus: '/api/internal/token-status',
 
+  trend: '/api/dashboard/trend',
+
   login:          '/auth/login',
   refresh:        '/auth/refresh',
   logout:         '/auth/logout',
