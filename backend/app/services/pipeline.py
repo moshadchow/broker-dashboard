@@ -18,6 +18,9 @@ def run_pipeline() -> None:
             access_token = auth_service.get_valid_access_token(db)
         except auth_service.NoTokenError:
             access_token = auth_service.auth(db)
+        except ExternalAuthError as exc:
+            logger.warning("token refresh rejected (%s); falling back to fresh login", exc)
+            access_token = auth_service.auth(db)
 
         today = today_local()
         today_iso = today.isoformat()
@@ -31,7 +34,11 @@ def run_pipeline() -> None:
             logger.info("all broker fetches failed; refreshing token and retrying")
             token = db.get(TokenStore, 1)
             if token is not None:
-                access_token = auth_service.do_refresh(db, token)
+                try:
+                    access_token = auth_service.do_refresh(db, token)
+                except ExternalAuthError as exc:
+                    logger.warning("token refresh rejected (%s); falling back to fresh login", exc)
+                    access_token = auth_service.auth(db)
                 broker_results, market_data = fetch_service.fetch_all(
                     access_token, today_iso, today_iso, settings.default_stock_exchange
                 )

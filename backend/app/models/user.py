@@ -14,7 +14,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(Enum("admin", "user", name="user_role"), nullable=False, default="user")
     broker_id: Mapped[str | None] = mapped_column(
-        String(10), ForeignKey("brokers.broker_id"), nullable=True
+        String(100), ForeignKey("brokers.broker_id"), nullable=True
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     must_change_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

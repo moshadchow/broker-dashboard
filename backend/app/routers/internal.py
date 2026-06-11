@@ -7,10 +7,12 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.config_data.brokers import BROKERS
 from app.db.session import get_db
+from app.dependencies.auth import get_current_user
 from app.models.broker_snapshot import BrokerSnapshot
 from app.models.market_snapshot import MarketSnapshot
 from app.models.pipeline_log import PipelineLog
 from app.models.token_store import TokenStore
+from app.models.user import User
 from app.schemas.broker import BrokerDataResponse, BrokerRowOut
 from app.schemas.market import MarketDataResponse, MarketRowOut
 from app.schemas.token import LastPipelineRun, TokenStatusResponse
@@ -29,12 +31,20 @@ def _aware_utc(dt):
 
 
 @router.get("/broker-data", response_model=BrokerDataResponse)
-def get_broker_data(db: Session = Depends(get_db)) -> BrokerDataResponse:
+def get_broker_data(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BrokerDataResponse:
     today = today_local_iso()
     rows: list[BrokerRowOut] = []
     latest_fetched_at = None
 
-    for broker in BROKERS:
+    if current_user.role == "user" and current_user.broker_id is not None:
+        brokers_to_show = [b for b in BROKERS if b["id"] == current_user.broker_id]
+    else:
+        brokers_to_show = BROKERS
+
+    for broker in brokers_to_show:
         snapshot = db.scalar(
             select(BrokerSnapshot)
             .where(BrokerSnapshot.broker_id == broker["id"])
