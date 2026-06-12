@@ -13,6 +13,7 @@ def _to_out(broker) -> BrokerOut:
     return BrokerOut(
         brokerId=broker.broker_id,
         brokerLabel=broker.broker_label,
+        externalApiId=broker.external_api_id,
         createdAt=broker.created_at,
         updatedAt=broker.updated_at,
     )
@@ -25,13 +26,13 @@ def list_brokers(db: Session = Depends(get_db)) -> list[BrokerOut]:
 
 @router.post("/", response_model=BrokerOut, status_code=status.HTTP_201_CREATED)
 def create_broker(payload: BrokerCreate, db: Session = Depends(get_db)) -> BrokerOut:
-    broker = broker_service.create_broker(db, payload.brokerId, payload.brokerLabel)
+    broker = broker_service.create_broker(db, payload.brokerId, payload.brokerLabel, payload.externalApiId)
     return _to_out(broker)
 
 
 @router.put("/{broker_id}", response_model=BrokerOut)
 def update_broker(broker_id: str, payload: BrokerUpdate, db: Session = Depends(get_db)) -> BrokerOut:
-    broker = broker_service.update_broker(db, broker_id, payload.brokerLabel)
+    broker = broker_service.update_broker(db, broker_id, payload.brokerLabel, payload.externalApiId)
     return _to_out(broker)
 
 

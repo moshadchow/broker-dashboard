@@ -15,10 +15,11 @@ export interface AdminUser extends User {
 }
 
 export interface AdminBroker {
-  brokerId:    string;
-  brokerLabel: string;
-  createdAt:   string;
-  updatedAt:   string;
+  brokerId:      string;
+  brokerLabel:   string;
+  externalApiId: string | null;
+  createdAt:     string;
+  updatedAt:     string;
 }
 
 export interface LoginRequest {
@@ -57,12 +58,14 @@ export interface UserUpdateInput {
 }
 
 export interface BrokerCreateInput {
-  brokerId:    string;
-  brokerLabel: string;
+  brokerId:      string;
+  brokerLabel:   string;
+  externalApiId?: string | null;
 }
 
 export interface BrokerUpdateInput {
-  brokerLabel: string;
+  brokerLabel:   string;
+  externalApiId?: string | null;
 }
 
 export type AuthStatus = 'checking' | 'unauthenticated' | 'authenticated';

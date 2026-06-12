@@ -22,7 +22,10 @@ def start_scheduler() -> None:
         trigger=CronTrigger(hour=hour, minute=minute, timezone=settings.app_timezone),
         id=DAILY_JOB_ID,
         replace_existing=True,
-        misfire_grace_time=3600,
+        # No misfire catch-up: "startup_run" below already covers a fresh
+        # fetch after a restart, so a missed daily slot should be skipped
+        # rather than fired again on top of it.
+        misfire_grace_time=None,
     )
 
     # Run once immediately on startup.

@@ -26,7 +26,7 @@ def run_pipeline() -> None:
         today_iso = today.isoformat()
 
         broker_results, market_data = fetch_service.fetch_all(
-            access_token, today_iso, today_iso, settings.default_stock_exchange
+            db, access_token, today_iso, today_iso, settings.default_stock_exchange
         )
 
         # If every broker failed, the access token may have expired mid-cycle - refresh and retry once.
@@ -40,7 +40,7 @@ def run_pipeline() -> None:
                     logger.warning("token refresh rejected (%s); falling back to fresh login", exc)
                     access_token = auth_service.auth(db)
                 broker_results, market_data = fetch_service.fetch_all(
-                    access_token, today_iso, today_iso, settings.default_stock_exchange
+                    db, access_token, today_iso, today_iso, settings.default_stock_exchange
                 )
 
         store_service.store_broker_results(db, broker_results, today_iso, today_iso)

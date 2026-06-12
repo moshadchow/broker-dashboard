@@ -76,18 +76,19 @@ backend/
 │   ├── models/              # token_store, broker_snapshots, market_snapshots, pipeline_logs,
 │   │                         # + admin panel: user, broker, token_blacklist
 │   ├── schemas/              # Pydantic models: internal endpoints + auth/user/admin_broker
-│   ├── config_data/brokers.py  # BROKERS list — keep in sync with src/config/brokers.ts
+│   ├── config_data/brokers.py  # BROKERS — seed/backfill source for the `brokers` table
+│   │                             # (external_api_id, order_index), keep in sync with src/config/brokers.ts
 │   ├── dependencies/auth.py # get_current_user, require_admin (JWT + blacklist checks)
 │   ├── services/
 │   │   ├── external_api.py  # httpx calls to external broker API
 │   │   ├── auth_service.py  # auth()/refresh + token_store CRUD (pipeline service account)
-│   │   ├── fetch_service.py # fetch_all(): 15 brokers + market
+│   │   ├── fetch_service.py # fetch_all(db, ...): pipeline-enabled brokers (from `brokers` table) + market
 │   │   ├── store_service.py # upserts into snapshot tables + pipeline_logs
 │   │   ├── pipeline.py      # run_pipeline(): orchestration
 │   │   ├── password_service.py # bcrypt hash/verify (admin panel)
 │   │   ├── jwt_service.py      # access/refresh token create + decode (admin panel)
 │   │   ├── user_service.py     # admin `users` table CRUD + seed_default_admin
-│   │   └── broker_service.py   # admin `brokers` table CRUD + seed_brokers
+│   │   └── broker_service.py   # admin `brokers` table CRUD + seed_brokers (+ pipeline broker list)
 │   ├── scheduler/jobs.py    # APScheduler: startup run + daily cron
 │   └── routers/
 │       ├── internal.py      # /api/internal/* endpoints (pipeline data, unauthenticated)
@@ -187,8 +188,10 @@ table, not the `.env` file.
 1. Get a valid access token (`token_store` row; refresh if expiring within
    `TOKEN_REFRESH_SKEW_MINUTES`, or full login if no row exists).
 2. Compute "today" in `APP_TIMEZONE`.
-3. Fetch all 15 brokers (`app/config_data/brokers.py`, sequential, per-broker
-   error isolation) + market trade info for `DEFAULT_STOCK_EXCHANGE`.
+3. Fetch all pipeline-enabled brokers (`broker_service.list_brokers_for_pipeline()`
+   — rows in the `brokers` table with a non-null `external_api_id`, ordered by
+   `order_index`; sequential, per-broker error isolation) + market trade info
+   for `DEFAULT_STOCK_EXCHANGE`.
 4. If **all** brokers failed, refresh the token once and retry the fetch.
 5. Upsert results into `broker_snapshots` / `market_snapshots`.
 6. Record the run in `pipeline_logs` with status `success` / `partial` / `failed`.
@@ -213,15 +216,19 @@ and skipped (MFA is assumed disabled for the service account).
 ### Scheduler (`app/scheduler/jobs.py`)
 
 `BackgroundScheduler` (timezone = `APP_TIMEZONE`) runs `run_pipeline()`:
-- once immediately on app startup, and
+- once immediately on app startup (job id `startup_run`), and
 - daily via `CronTrigger` at `SCHEDULED_TIME` (job id `daily_pipeline`,
-  `misfire_grace_time=3600`).
+  `misfire_grace_time=None` — a missed daily slot is skipped rather than
+  fired late, since `startup_run` already covers a fresh fetch after a
+  restart).
 
 ### Internal endpoints (`app/routers/internal.py`, prefix `/api/internal`)
 
 - `GET /api/internal/broker-data` → `BrokerDataResponse` — most recent
-  snapshot per broker (15 entries, `app/config_data/brokers.py` order). Brokers
-  with no snapshot yet return `fetchError: true` + zeroed fields.
+  snapshot per pipeline-enabled broker (ordered by `brokers.order_index`,
+  backfilled from `app/config_data/brokers.py`). Brokers with no snapshot yet
+  return `fetchError: true` + zeroed fields. A `role="user"` caller with a
+  `broker_id` assignment sees only their own broker's row.
 - `GET /api/internal/market-data` → `MarketDataResponse` — most recent snapshot
   for `DEFAULT_STOCK_EXCHANGE`, or `{ success: false, market: null }` if none.
 - `GET /api/internal/token-status` → token validity, `expiresAt`,
@@ -230,7 +237,10 @@ and skipped (MFA is assumed disabled for the service account).
   background, returns `{ "triggered": true }` (manual/testing use).
 
 > Important: `app/config_data/brokers.py` must be kept in sync with
-> `src/config/brokers.ts` (same broker IDs/labels, same order).
+> `src/config/brokers.ts` (same broker IDs/labels, same order) — it's the
+> seed/backfill source for the `brokers` table's `external_api_id` and
+> `order_index` columns (matched by `broker_label`), which is what the
+> pipeline and `/api/internal/broker-data` actually read at runtime.
 
 See `backend/README.md` for setup/run instructions.
 
@@ -254,10 +264,16 @@ password).
 
 ### MySQL tables (auto-created via `Base.metadata.create_all()`)
 
-- `brokers` — `broker_id` (PK, e.g. `"SNM"`), `broker_label`, timestamps.
-  Independent from `app/config_data/brokers.py` / `src/config/brokers.ts`
-  (the pipeline's hardcoded 15-broker list); seeded once from those labels on
-  first startup (`broker_service.seed_brokers`), editable thereafter.
+- `brokers` — `broker_id` (PK, e.g. `"SNM"`), `broker_label`, `external_api_id`
+  (24-char external-API ObjectId, nullable), `order_index` (nullable),
+  timestamps. Seeded from `app/config_data/brokers.py` on first startup
+  (`broker_service.seed_brokers`, including `external_api_id`/`order_index`),
+  editable thereafter via the admin panel. This table is now the runtime
+  source for the pipeline's broker list (see `list_brokers_for_pipeline`):
+  rows with a non-null `external_api_id` are fetched, ordered by
+  `order_index`. Brokers added via the admin UI with no matching
+  `config_data/brokers.py` entry have `external_api_id`/`order_index = NULL`
+  and are excluded from the pipeline (admin-CRUD/user-assignment only).
 - `users` — `id`, `email` (unique), `password_hash` (bcrypt via passlib),
   `role` (`admin`/`user`), `broker_id` (nullable FK → `brokers.broker_id`),
   `is_active`, `must_change_password`, timestamps.
@@ -267,7 +283,14 @@ password).
 
 ### Seeding (`app/main.py` lifespan, after `create_all()`)
 
-- `broker_service.seed_brokers()` — no-op if `brokers` is non-empty.
+- `broker_service.seed_brokers()` — on a fresh `brokers` table, seeds all 15
+  rows (with `external_api_id`/`order_index`) from
+  `app/config_data/brokers.py`. On an existing table, idempotently backfills
+  `external_api_id`/`order_index` for rows where they're still `NULL`,
+  matched by `broker_label` (runs every startup, but is a no-op once
+  backfilled). `app/db/schema_upgrades.ensure_broker_columns()` adds these
+  two columns to a pre-existing `brokers` table before seeding runs, since
+  `create_all()` doesn't alter existing tables.
 - `user_service.seed_default_admin()` — no-op if `users` is non-empty;
   otherwise creates `admin@xfl.com` / `Admin@1234`, `role="admin"`,
   `must_change_password=True`. **Change this password after first login.**
@@ -515,7 +538,8 @@ stale or missing snapshot data until the next successful pipeline run.
 | Item | Type | Location |
 |------|------|----------|
 | Broker IDs + labels (frontend) | Hardcoded | `src/config/brokers.ts` |
-| Broker IDs + labels (backend) | Hardcoded, must mirror frontend | `backend/app/config_data/brokers.py` |
+| Broker IDs + labels (backend, seed/backfill data) | Hardcoded, must mirror frontend | `backend/app/config_data/brokers.py` |
+| Broker list used by pipeline at runtime | DB (`brokers` table, seeded/backfilled from the above) | `backend/app/models/broker.py` |
 | Internal endpoint paths | Hardcoded | `src/config/api.ts` |
 | Market share threshold | Hardcoded const | `src/config/api.ts` |
 | External API base URL, service-account credentials, schedule, DB connection | Env vars | `backend/.env` |

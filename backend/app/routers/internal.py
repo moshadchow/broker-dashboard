@@ -5,7 +5,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.config_data.brokers import BROKERS
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.broker_snapshot import BrokerSnapshot
@@ -17,6 +16,7 @@ from app.schemas.broker import BrokerAggregateOut, BrokerDataResponse, BrokerRow
 from app.schemas.market import MarketDataResponse, MarketRowOut
 from app.schemas.token import LastPipelineRun, TokenStatusResponse
 from app.scheduler.jobs import DAILY_JOB_ID, scheduler
+from app.services import broker_service
 from app.services.fetch_service import ZERO_BROKER_DATA
 from app.services.pipeline import run_pipeline
 from app.utils.time import is_expiring_soon, today_local
@@ -41,10 +41,12 @@ def get_broker_data(
     rows: list[BrokerRowOut] = []
     latest_fetched_at = None
 
+    all_brokers = broker_service.list_brokers_for_pipeline(db)
+
     if current_user.role == "user" and current_user.broker_id is not None:
-        brokers_to_show = [b for b in BROKERS if b["id"] == current_user.broker_id]
+        brokers_to_show = [b for b in all_brokers if b.broker_id == current_user.broker_id]
     else:
-        brokers_to_show = BROKERS
+        brokers_to_show = all_brokers
 
     snapshots_by_broker: dict[str, BrokerSnapshot] = {}
     for snapshot in db.scalars(
@@ -55,12 +57,12 @@ def get_broker_data(
         snapshots_by_broker.setdefault(snapshot.broker_id, snapshot)
 
     for broker in brokers_to_show:
-        snapshot = snapshots_by_broker.get(broker["id"])
+        snapshot = snapshots_by_broker.get(broker.external_api_id)
         if snapshot is None:
             rows.append(
                 BrokerRowOut(
-                    brokerId=broker["id"],
-                    label=broker["label"],
+                    brokerId=broker.external_api_id,
+                    label=broker.broker_label,
                     fetchError=True,
                     **ZERO_BROKER_DATA,
                 )

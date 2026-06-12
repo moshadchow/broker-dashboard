@@ -1,0 +1,15 @@
+[Unit]
+Description=Broker Dashboard FastAPI backend
+After=network.target mariadb.service mysqld.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/var/www/broker-dashboard/backend
+ExecStart=/var/www/broker-dashboard/backend/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 9000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

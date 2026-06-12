@@ -19,10 +19,12 @@ export default function BrokerManagement() {
 
   const [newBrokerId, setNewBrokerId] = useState('');
   const [newBrokerLabel, setNewBrokerLabel] = useState('');
+  const [newExternalApiId, setNewExternalApiId] = useState('');
   const [creating, setCreating] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState('');
+  const [editExternalApiId, setEditExternalApiId] = useState('');
 
   async function load() {
     setLoading(true);
@@ -47,9 +49,11 @@ export default function BrokerManagement() {
     try {
       const brokerId = newBrokerId.trim().toUpperCase();
       const brokerLabel = newBrokerLabel.trim();
-      await adminService.createBroker({ brokerId, brokerLabel });
+      const externalApiId = newExternalApiId.trim() || null;
+      await adminService.createBroker({ brokerId, brokerLabel, externalApiId });
       setNewBrokerId('');
       setNewBrokerLabel('');
+      setNewExternalApiId('');
       await load();
     } catch {
       setError('Failed to create broker. The broker ID may already exist.');
@@ -61,12 +65,14 @@ export default function BrokerManagement() {
   function startEdit(broker: AdminBroker) {
     setEditingId(broker.brokerId);
     setEditLabel(broker.brokerLabel);
+    setEditExternalApiId(broker.externalApiId ?? '');
   }
 
   async function saveEdit(brokerId: string) {
     setError(null);
     try {
-      await adminService.updateBroker(brokerId, { brokerLabel: editLabel.trim() });
+      const externalApiId = editExternalApiId.trim() || null;
+      await adminService.updateBroker(brokerId, { brokerLabel: editLabel.trim(), externalApiId });
       setEditingId(null);
       await load();
     } catch {
@@ -124,6 +130,18 @@ export default function BrokerManagement() {
           />
         </div>
 
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">External API ID</label>
+          <input
+            type="text"
+            maxLength={32}
+            value={newExternalApiId}
+            onChange={e => setNewExternalApiId(e.target.value)}
+            placeholder="e.g. 681caf09c0024a529d5a0fe4"
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
         <button
           type="submit"
           disabled={creating}
@@ -139,16 +157,17 @@ export default function BrokerManagement() {
             <tr>
               <TH>Broker ID</TH>
               <TH>Label</TH>
+              <TH>External API ID</TH>
               <TH>Updated</TH>
               <TH>Actions</TH>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loading && (
-              <tr><TD className="text-gray-400" colSpan={4}>Loading…</TD></tr>
+              <tr><TD className="text-gray-400" colSpan={5}>Loading…</TD></tr>
             )}
             {!loading && brokers.length === 0 && (
-              <tr><TD className="text-gray-400" colSpan={4}>No brokers yet.</TD></tr>
+              <tr><TD className="text-gray-400" colSpan={5}>No brokers yet.</TD></tr>
             )}
             {!loading && brokers.map(broker => (
               <tr key={broker.brokerId} className="hover:bg-gray-50">
@@ -163,6 +182,19 @@ export default function BrokerManagement() {
                     />
                   ) : (
                     broker.brokerLabel
+                  )}
+                </TD>
+                <TD>
+                  {editingId === broker.brokerId ? (
+                    <input
+                      type="text"
+                      maxLength={32}
+                      value={editExternalApiId}
+                      onChange={e => setEditExternalApiId(e.target.value)}
+                      className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  ) : (
+                    broker.externalApiId ?? <span className="text-gray-400">—</span>
                   )}
                 </TD>
                 <TD>{new Date(broker.updatedAt).toLocaleString()}</TD>
