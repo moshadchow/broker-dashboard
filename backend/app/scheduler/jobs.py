@@ -28,7 +28,7 @@ def start_scheduler() -> None:
         misfire_grace_time=None,
     )
 
-    # Run once immediately on startup.
+    # Run once immediately on startup. REMOVE this line if you don't want this run on every restart (e.g. if you only want the daily scheduled runs).
     scheduler.add_job(run_pipeline, id="startup_run", next_run_time=datetime.now())
 
     scheduler.start()
