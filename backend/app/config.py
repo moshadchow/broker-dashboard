@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     auto_auth_password: str = "Md.moshad@120"
     auto_auth_device_id: str = "default-device-id"
 
-    scheduled_time: str = "06:00"
+    scheduled_time: str = "03:00"
     app_timezone: str = "Asia/Dhaka"
 
     default_stock_exchange: str = "DSE"

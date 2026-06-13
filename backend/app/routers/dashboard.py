@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
+from app.models.broker import Broker
 from app.models.broker_snapshot import BrokerSnapshot
 from app.models.market_snapshot import MarketSnapshot
 from app.models.user import User
@@ -81,14 +82,11 @@ def get_trend(
     ).all()
 
     by_date_broker: dict[date, dict[str, dict[str, float]]] = {}
-    own_broker_label: str | None = None
     for row in snapshot_rows:
         by_date_broker.setdefault(row.from_date, {})[row.broker_id] = {
             "trade": float(row.total_trade),
             "value": float(row.total_value),
         }
-        if row.broker_id == current_user.broker_id:
-            own_broker_label = row.broker_label
 
     market_rows = db.scalars(
         select(MarketSnapshot).where(
@@ -104,6 +102,12 @@ def get_trend(
 
     show_own_broker = current_user.role == "user" and current_user.broker_id is not None
 
+    own_broker_label: str | None = None
+    if show_own_broker:
+        own_broker = db.get(Broker, current_user.broker_id)
+        if own_broker is not None:
+            own_broker_label = own_broker.broker_label
+
     dates = _date_range(fromDate, toDate)
 
     return TrendResponse(
@@ -115,5 +119,5 @@ def get_trend(
         value=_build_series(
             dates, by_date_broker, market_by_date, "value", show_own_broker, current_user.broker_id
         ),
-        ownBrokerLabel=own_broker_label if show_own_broker else None,
+        ownBrokerLabel=own_broker_label,
     )
