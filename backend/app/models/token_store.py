@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Integer, String, Text, func
+from sqlalchemy import DateTime, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -8,9 +8,8 @@ from app.db.base import Base
 
 class TokenStore(Base):
     __tablename__ = "token_store"
-    __table_args__ = (CheckConstraint("id = 1", name="chk_single_row"),)
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    credential_name: Mapped[str] = mapped_column(String(32), primary_key=True)
     access_token: Mapped[str] = mapped_column(Text, nullable=False)
     refresh_token: Mapped[str] = mapped_column(Text, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)

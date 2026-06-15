@@ -152,7 +152,7 @@ def get_market_data(
 
 @router.get("/token-status", response_model=TokenStatusResponse)
 def get_token_status(db: Session = Depends(get_db)) -> TokenStatusResponse:
-    token = db.get(TokenStore, 1)
+    token = db.get(TokenStore, settings.broker_summary_credentials.name)
     last_log = db.scalar(select(PipelineLog).order_by(PipelineLog.id.desc()).limit(1))
 
     job = scheduler.get_job(DAILY_JOB_ID)

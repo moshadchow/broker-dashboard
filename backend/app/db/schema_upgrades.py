@@ -25,3 +25,32 @@ def ensure_broker_columns(engine: Engine) -> None:
         if "order_index" not in existing_cols:
             conn.execute(text("ALTER TABLE brokers ADD COLUMN order_index INT NULL"))
             logger.info("Added column brokers.order_index")
+
+
+def ensure_token_store_credential_name(engine: Engine) -> None:
+    """Migrate token_store from a singleton id=1 row to a credential_name PK.
+
+    create_all() only creates missing tables, so a pre-existing token_store
+    (id INT PK, chk_single_row CHECK(id=1)) needs an explicit migration to
+    the new credential_name VARCHAR PK schema. Safe to call on every startup.
+    """
+    inspector = inspect(engine)
+    if "token_store" not in inspector.get_table_names():
+        return
+
+    existing_cols = {col["name"] for col in inspector.get_columns("token_store")}
+    if "credential_name" in existing_cols:
+        return
+
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE token_store ADD COLUMN credential_name VARCHAR(32) NULL"))
+        conn.execute(text("UPDATE token_store SET credential_name = 'broker_summary' WHERE id = 1"))
+
+        for constraint in inspector.get_check_constraints("token_store"):
+            conn.execute(text(f"ALTER TABLE token_store DROP CHECK {constraint['name']}"))
+
+        conn.execute(text("ALTER TABLE token_store DROP PRIMARY KEY"))
+        conn.execute(text("ALTER TABLE token_store MODIFY COLUMN credential_name VARCHAR(32) NOT NULL"))
+        conn.execute(text("ALTER TABLE token_store ADD PRIMARY KEY (credential_name)"))
+        conn.execute(text("ALTER TABLE token_store DROP COLUMN id"))
+        logger.info("Migrated token_store to credential_name primary key")

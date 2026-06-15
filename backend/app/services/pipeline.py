@@ -10,38 +10,53 @@ from app.utils.time import now_utc, today_local
 logger = logging.getLogger(__name__)
 
 
+def _get_token(db, credentials):
+    try:
+        return auth_service.get_valid_access_token(db, credentials)
+    except auth_service.NoTokenError:
+        return auth_service.auth(db, credentials)
+    except ExternalAuthError as exc:
+        logger.warning("token refresh rejected (%s); falling back to fresh login", exc)
+        return auth_service.auth(db, credentials)
+
+
 def run_pipeline() -> None:
     started_at = now_utc()
     db = SessionLocal()
     try:
-        try:
-            access_token = auth_service.get_valid_access_token(db)
-        except auth_service.NoTokenError:
-            access_token = auth_service.auth(db)
-        except ExternalAuthError as exc:
-            logger.warning("token refresh rejected (%s); falling back to fresh login", exc)
-            access_token = auth_service.auth(db)
+        broker_creds = settings.broker_summary_credentials
+        market_creds = settings.market_credentials
+
+        broker_token = _get_token(db, broker_creds)
+        market_token = _get_token(db, market_creds)
 
         today = today_local()
         today_iso = today.isoformat()
 
         broker_results, market_data = fetch_service.fetch_all(
-            db, access_token, today_iso, today_iso, settings.default_stock_exchange
+            db, broker_token, market_token, today_iso, today_iso, settings.default_stock_exchange
         )
 
         # If every broker failed, the access token may have expired mid-cycle - refresh and retry once.
         if broker_results and all(r["fetch_error"] for r in broker_results):
             logger.info("all broker fetches failed; refreshing token and retrying")
-            token = db.get(TokenStore, 1)
+            token = db.get(TokenStore, broker_creds.name)
             if token is not None:
+                retried_token = None
                 try:
-                    access_token = auth_service.do_refresh(db, token)
+                    retried_token = auth_service.do_refresh(db, token, broker_creds)
                 except ExternalAuthError as exc:
                     logger.warning("token refresh rejected (%s); falling back to fresh login", exc)
-                    access_token = auth_service.auth(db)
-                broker_results, market_data = fetch_service.fetch_all(
-                    db, access_token, today_iso, today_iso, settings.default_stock_exchange
-                )
+                    try:
+                        retried_token = auth_service.auth(db, broker_creds)
+                    except ExternalAuthError as exc2:
+                        logger.warning("fresh login also failed (%s); skipping retry", exc2)
+
+                if retried_token is not None:
+                    broker_token = retried_token
+                    broker_results, market_data = fetch_service.fetch_all(
+                        db, broker_token, market_token, today_iso, today_iso, settings.default_stock_exchange
+                    )
 
         store_service.store_broker_results(db, broker_results, today_iso, today_iso)
         store_service.store_market_result(db, market_data, settings.default_stock_exchange, today)
