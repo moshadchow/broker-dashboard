@@ -2,7 +2,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import type { TrendResponse, TrendSeries } from '../types';
+import type { TrendResponse } from '../types';
 
 interface Props {
   trend: TrendResponse;
@@ -20,29 +20,57 @@ function fmtDate(d: string): string {
 }
 
 interface ChartRow {
-  date:         string;
-  ownBroker?:   number;
-  xfl:          number;
-  market:       number;
-  pctOfXfl?:    number;
-  pctOfMarket:  number;
+  date:                  string;
+  tradesOwn?:            number;
+  tradesXfl:             number;
+  tradesMarket:          number;
+  valueOwn?:             number;
+  valueXfl:              number;
+  valueMarket:           number;
+  pctOfMarketTrades:     number;
+  pctOfXflTrades?:       number;
+  pctOfMarketValue:      number;
+  pctOfXflValue?:        number;
+  pctXflOfMarketTrades: number;
+  pctXflOfMarketValue:  number;
 }
 
-function buildData(dates: string[], series: TrendSeries): ChartRow[] {
-  return dates.map((date, i) => ({
-    date:        fmtDate(date),
-    ownBroker:   series.ownBroker?.[i],
-    xfl:         series.xfl[i],
-    market:      series.market[i],
-    pctOfXfl:    series.pctOfXfl?.[i],
-    pctOfMarket: series.pctOfMarket[i],
-  }));
+function buildData(trend: TrendResponse): ChartRow[] {
+  return trend.dates.map((date, i) => {
+    const tradesXfl = trend.trades.xfl[i];
+    const tradesMarket = trend.trades.market[i];
+    const valueXfl = trend.value.xfl[i];
+    const valueMarket = trend.value.market[i];
+    return {
+      date:              fmtDate(date),
+      tradesOwn:         trend.trades.ownBroker?.[i],
+      tradesXfl,
+      tradesMarket,
+      valueOwn:          trend.value.ownBroker?.[i],
+      valueXfl,
+      valueMarket,
+      pctOfMarketTrades: trend.trades.pctOfMarket[i],
+      pctOfXflTrades:    trend.trades.pctOfXfl?.[i],
+      pctOfMarketValue:  trend.value.pctOfMarket[i],
+      pctOfXflValue:     trend.value.pctOfXfl?.[i],
+      pctXflOfMarketTrades: tradesMarket > 0 ? (tradesXfl / tradesMarket) * 100 : 0,
+      pctXflOfMarketValue:  valueMarket > 0 ? (valueXfl / valueMarket) * 100 : 0,
+    };
+  });
 }
+
+const PCT_FIELDS: Record<string, { market: keyof ChartRow; xfl?: keyof ChartRow }> = {
+  tradesOwn:    { market: 'pctOfMarketTrades', xfl: 'pctOfXflTrades' },
+  tradesXfl:    { market: 'pctXflOfMarketTrades' },
+  valueOwn:     { market: 'pctOfMarketValue', xfl: 'pctOfXflValue' },
+  valueXfl:     { market: 'pctXflOfMarketValue' },
+};
 
 interface TooltipPayloadItem {
   name:    string;
   value:   number;
   color:   string;
+  dataKey: string;
   payload: ChartRow;
 }
 
@@ -54,69 +82,72 @@ function CustomTooltip({
   label?:   string;
 }) {
   if (!active || !payload?.length) return null;
-  const row = payload[0].payload;
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-4 py-3 text-sm">
       <p className="font-bold text-gray-800 mb-2">{label}</p>
-      {payload.map(p => (
-        <p key={p.name} style={{ color: p.color }}>
-          {p.name}: {p.value.toLocaleString()}
-        </p>
-      ))}
-      <p className="text-gray-400 mt-1">
-        % of market: {row.pctOfMarket.toFixed(2)}%
-        {row.pctOfXfl !== undefined && ` · % of XFL: ${row.pctOfXfl.toFixed(2)}%`}
-      </p>
-    </div>
-  );
-}
-
-function SeriesChart({
-  title, dates, series, ownLabel,
-}: {
-  title:    string;
-  dates:    string[];
-  series:   TrendSeries;
-  ownLabel: string | null;
-}) {
-  const data = buildData(dates, series);
-  const showOwn = series.ownBroker !== undefined;
-
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
-      <h2 className="text-base font-semibold text-gray-700 mb-4">{title}</h2>
-      <ResponsiveContainer width="100%" height={320}>
-        <LineChart data={data} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-          <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-          <YAxis tickFormatter={fmtTick} tick={{ fontSize: 11 }} />
-          <Tooltip content={<CustomTooltip />} />
-          <Legend />
-          {showOwn && (
-            <Line
-              type="monotone"
-              dataKey="ownBroker"
-              name={ownLabel ?? 'Own Broker'}
-              stroke="#f59e0b"
-              strokeWidth={2}
-              dot={false}
-            />
-          )}
-          <Line type="monotone" dataKey="xfl" name="XFL Total" stroke="#3b82f6" strokeWidth={2} dot={false} />
-          <Line type="monotone" dataKey="market" name="Market" stroke="#10b981" strokeWidth={2} dot={false} />
-        </LineChart>
-      </ResponsiveContainer>
+      {payload.map(p => {
+        const pctFields = PCT_FIELDS[p.dataKey];
+        const pctOfMarket = pctFields ? (p.payload[pctFields.market] as number | undefined) : undefined;
+        const pctOfXfl = pctFields?.xfl ? (p.payload[pctFields.xfl] as number | undefined) : undefined;
+        return (
+          <p key={p.name} style={{ color: p.color }}>
+            {p.name}: {p.value.toLocaleString()}
+            {pctOfMarket !== undefined && ` (${pctOfMarket.toFixed(2)}% of market`}
+            {pctOfXfl !== undefined && `, ${pctOfXfl.toFixed(2)}% of XFL`}
+            {pctOfMarket !== undefined && ')'}
+          </p>
+        );
+      })}
     </div>
   );
 }
 
 export default function TrendChart({ trend }: Props) {
-  const ownLabel = trend.ownBrokerLabel ?? null;
+  const data = buildData(trend);
+  const showOwn = trend.trades.ownBroker !== undefined;
+  const ownLabel = trend.ownBrokerLabel ?? 'Own Broker';
+
   return (
-    <div className="space-y-6">
-      <SeriesChart title="Trade Count Trend" dates={trend.dates} series={trend.trades} ownLabel={ownLabel} />
-      <SeriesChart title="Value Trend" dates={trend.dates} series={trend.value} ownLabel={ownLabel} />
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
+      <h2 className="text-base font-semibold text-gray-700 mb-4">Trade Count &amp; Value Trend</h2>
+      <ResponsiveContainer width="100%" height={400}>
+        <LineChart data={data} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+          <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+          <YAxis yAxisId="trades" tickFormatter={fmtTick} tick={{ fontSize: 11 }} />
+          <YAxis yAxisId="value" orientation="right" tickFormatter={(v: number) => v.toLocaleString()} tick={{ fontSize: 11 }} />
+          <Tooltip content={<CustomTooltip />} />
+          <Legend />
+          {showOwn && (
+            <Line
+              yAxisId="trades"
+              type="monotone"
+              dataKey="tradesOwn"
+              name={`${ownLabel} (Trades)`}
+              stroke="#f59e0b"
+              strokeWidth={2}
+              dot={false}
+            />
+          )}
+          <Line yAxisId="trades" type="monotone" dataKey="tradesXfl" name="XFL Total (Trades)" stroke="#3b82f6" strokeWidth={2} dot={false} />
+          <Line yAxisId="trades" type="monotone" dataKey="tradesMarket" name="Market (Trades)" stroke="#10b981" strokeWidth={2} dot={false} />
+          {showOwn && (
+            <Line
+              yAxisId="value"
+              type="monotone"
+              dataKey="valueOwn"
+              name={`${ownLabel} (Value)`}
+              stroke="#f59e0b"
+              strokeWidth={2}
+              strokeDasharray="5 5"
+              dot={false}
+            />
+          )}
+          <Line yAxisId="value" type="monotone" dataKey="valueXfl" name="XFL Total (Value)" stroke="#3b82f6" strokeWidth={2} strokeDasharray="5 5" dot={false} />
+          <Line yAxisId="value" type="monotone" dataKey="valueMarket" name="Market (Value)" stroke="#10b981" strokeWidth={2} strokeDasharray="5 5" dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
     </div>
   );
 }
