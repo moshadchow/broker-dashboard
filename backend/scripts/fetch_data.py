@@ -37,15 +37,21 @@ REQUEST_TIMEOUT = 30
 
 # Keep in sync with backend/app/config_data/brokers.py
 BROKER_LABELS: dict[str, str] = {
-    "68d3b213bc4af8054a7dd843": "SNM",
-    "68d3b25510420252a457a4e1": "BAL",
-    "68d3b228bc4af8054a7dd85c": "EBS",
-    "68d26fbafc08e0d825d20e43": "GDF",
-    "68d3b23810420252a457a4c6": "IBB",
-    "68d27053fc08e0d825d20e8e": "NLS",
-    "68d27024fc08e0d825d20e75": "ONE",
-    "68d3b247bc4af8054a7dd875": "SJB",
-    "68d26fd0fc08e0d825d20e5c": "UBR",
+    "681cae5ec0024a529d5a0fa3": "UBR",
+    "681cae95c0024a529d5a0fb0": "EBS",
+    "681caeb1c0024a529d5a0fbd": "ONE",
+    "681caec3c0024a529d5a0fca": "SJB",
+    "681caee7c0024a529d5a0fd7": "NLS",
+    "681caf09c0024a529d5a0fe4": "SNM",
+    "681caf1cc0024a529d5a0ff1": "BAL",
+    "681caf2dc0024a529d5a0ffe": "GDF",
+    "681caf3fc0024a529d5a100b": "IBB",
+    "6930211e371a2699f4df89f6": "SKY",
+    "6949489d43148d5124c5bffe": "REM",
+    "698482b3de47c112ec2675aa": "FCS",
+    "698482c1de47c112ec2675c4": "IBL",
+    "698482ccde47c112ec2675de": "MPL",
+    "698482d6de47c112ec2675f8": "WSL"
 }
 
 CREATE_BROKER_SNAPSHOTS_TABLE = """
