@@ -17,7 +17,7 @@ class MfaRequiredError(ExternalAuthError):
     """Raised when the external API requires MFA for the service account."""
 
 
-def login(username: str, password: str, device_id: str) -> dict:
+def login(username: str, password: str, device_id: str, app_type: int) -> dict:
     resp = httpx.post(
         f"{settings.external_api_base_url}/api/login",
         json={
@@ -26,11 +26,14 @@ def login(username: str, password: str, device_id: str) -> dict:
             "deviceId": device_id,
             "mfaKey": "",
             "mfaCode": "",
-            "appType": settings.app_type,
+            "appType": app_type,
         },
         timeout=REQUEST_TIMEOUT,
     )
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        raise ExternalAuthError(f"Login failed: {exc}") from exc
     body = resp.json()
     data = body.get("data") or {}
     if not body.get("success") or not data.get("success"):
@@ -50,7 +53,10 @@ def refresh_token(access_token: str, refresh_token_value: str, device_id: str) -
         },
         timeout=REQUEST_TIMEOUT,
     )
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        raise ExternalAuthError(f"Token refresh failed: {exc}") from exc
     body = resp.json()
     data = body.get("data") or {}
     if not body.get("success") or not data.get("success"):

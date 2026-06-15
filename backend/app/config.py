@@ -1,13 +1,31 @@
+from dataclasses import dataclass
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+@dataclass(frozen=True)
+class CredentialSet:
+    name: str
+    username: str
+    password: str
+    device_id: str
+    app_type: int
+
+
 class Settings(BaseSettings):
+    app_env: str = "uat"
+
     external_api_base_url: str
     app_type: int = 1
 
     auto_auth_username: str = "xfl-moshad-adm"
     auto_auth_password: str = "Md.moshad@120"
     auto_auth_device_id: str = "default-device-id"
+
+    market_auth_username: str = ""
+    market_auth_password: str = ""
+    market_auth_device_id: str = ""
+    market_app_type: str = ""
 
     scheduled_time: str = "03:00"
     app_timezone: str = "Asia/Dhaka"
@@ -45,6 +63,34 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_allow_origins.split(",") if origin.strip()]
+
+    @property
+    def broker_summary_credentials(self) -> CredentialSet:
+        return CredentialSet(
+            name="broker_summary",
+            username=self.auto_auth_username,
+            password=self.auto_auth_password,
+            device_id=self.auto_auth_device_id,
+            app_type=self.app_type,
+        )
+
+    @property
+    def market_credentials(self) -> CredentialSet:
+        if self.market_auth_username:
+            return CredentialSet(
+                name="market_trade",
+                username=self.market_auth_username,
+                password=self.market_auth_password,
+                device_id=self.market_auth_device_id,
+                app_type=int(self.market_app_type) if self.market_app_type else self.app_type,
+            )
+        return CredentialSet(
+            name="market_trade",
+            username=self.auto_auth_username,
+            password=self.auto_auth_password,
+            device_id=self.auto_auth_device_id,
+            app_type=self.app_type,
+        )
 
 
 settings = Settings()

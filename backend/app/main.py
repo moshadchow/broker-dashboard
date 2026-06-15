@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.db.base import Base
-from app.db.schema_upgrades import ensure_broker_columns
+from app.db.schema_upgrades import ensure_broker_columns, ensure_token_store_credential_name
 from app.db.session import SessionLocal, engine
 from app.routers import admin_brokers, admin_users, auth, dashboard, internal
 from app.scheduler.jobs import start_scheduler, stop_scheduler
@@ -17,6 +17,7 @@ logging.basicConfig(level=logging.INFO)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    ensure_token_store_credential_name(engine)
     Base.metadata.create_all(bind=engine)
     ensure_broker_columns(engine)
 
