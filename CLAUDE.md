@@ -1,5 +1,26 @@
 # CLAUDE.md — Broker Execution vs Market Comparison Dashboard
 
+## Commands
+
+```bash
+# Frontend (repo root)
+npm install
+npm run dev       # Vite dev server (proxies /api/internal, /auth, /admin to :8000)
+npm run build     # tsc -b && vite build
+npm run preview
+
+# Backend
+cd backend
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+copy .env.example .env     # then fill in credentials/DB connection
+uvicorn app.main:app --reload --port 8000
+```
+
+No test suite or linter is currently configured in either the frontend or
+backend.
+
 ## Project Overview
 
 React dashboard fetching order-execution data per broker and market-wide
