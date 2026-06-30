@@ -18,8 +18,20 @@ export interface AdminBroker {
   brokerId:      string;
   brokerLabel:   string;
   externalApiId: string | null;
+  apiEndpoint:   string | null;
   createdAt:     string;
   updatedAt:     string;
+}
+
+export interface AdminOmsEndpoint {
+  name:           string;
+  baseUrl:        string;
+  credentialName: string;
+  username:       string;
+  deviceId:       string;
+  appType:        number;
+  createdAt:      string;
+  updatedAt:      string;
 }
 
 export interface LoginRequest {
@@ -58,14 +70,34 @@ export interface UserUpdateInput {
 }
 
 export interface BrokerCreateInput {
-  brokerId:      string;
-  brokerLabel:   string;
+  brokerId:       string;
+  brokerLabel:    string;
   externalApiId?: string | null;
+  apiEndpoint?:   string | null;
 }
 
 export interface BrokerUpdateInput {
-  brokerLabel:   string;
+  brokerLabel:    string;
   externalApiId?: string | null;
+  apiEndpoint?:   string | null;
+}
+
+export interface OmsEndpointCreateInput {
+  name:           string;
+  baseUrl:        string;
+  credentialName: string;
+  username:       string;
+  password:       string;
+  deviceId:       string;
+  appType:        number;
+}
+
+export interface OmsEndpointUpdateInput {
+  baseUrl:   string;
+  username:  string;
+  password?: string | null;
+  deviceId:  string;
+  appType:   number;
 }
 
 export type AuthStatus = 'checking' | 'unauthenticated' | 'authenticated';

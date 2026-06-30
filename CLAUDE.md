@@ -67,7 +67,7 @@ src/
 │   ├── httpClient.ts        # Shared axios instance: attaches Bearer token, refreshes on 401
 │   ├── tokenStorage.ts      # Persists { accessToken, refreshToken } in localStorage
 │   ├── authService.ts       # login/logout/changePassword/fetchMe (/auth/*)
-│   └── adminService.ts      # Admin CRUD for brokers/users (/admin/*)
+│   └── adminService.ts      # Admin CRUD for brokers/users/oms-endpoints (/admin/*)
 ├── hooks/
 │   └── useDashboardData.ts # Fetches internal endpoints + computes aggregation
 ├── context/
@@ -83,7 +83,8 @@ src/
 │   └── admin/
 │       ├── AdminLayout.tsx       # Admin shell: header + sidebar nav + <Outlet/>
 │       ├── BrokerManagement.tsx  # CRUD UI for admin `brokers` table
-│       └── UserManagement.tsx    # CRUD UI for `users` table (role/broker assignment)
+│       ├── UserManagement.tsx    # CRUD UI for `users` table (role/broker assignment)
+│       └── EndpointManagement.tsx # CRUD UI for `oms_endpoints` table (base URL + credentials)
 ├── types/
 │   ├── index.ts            # Dashboard TS interfaces
 │   └── auth.ts             # Admin-panel auth/user/broker TS interfaces
@@ -93,12 +94,14 @@ backend/
 ├── app/
 │   ├── main.py              # FastAPI app, lifespan (DB init + seeding + scheduler), CORS, routers
 │   ├── config.py            # Settings (.env), incl. JWT settings
-│   ├── db/                  # SQLAlchemy engine/session
+│   ├── db/                  # SQLAlchemy engine/session, schema_upgrades.py (idempotent ALTERs)
 │   ├── models/              # token_store, broker_snapshots, market_snapshots, pipeline_logs,
-│   │                         # + admin panel: user, broker, token_blacklist
-│   ├── schemas/              # Pydantic models: internal endpoints + auth/user/admin_broker
-│   ├── config_data/brokers.py  # BROKERS — seed/backfill source for the `brokers` table
-│   │                             # (external_api_id, order_index), keep in sync with src/config/brokers.ts
+│   │                         # + admin panel: user, broker, token_blacklist, oms_endpoint
+│   ├── schemas/              # Pydantic models: internal endpoints + auth/user/admin_broker/admin_oms_endpoint
+│   ├── config_data/
+│   │   ├── brokers.py        # BROKERS — seed/backfill source for the `brokers` table
+│   │   │                       # (external_api_id, order_index), keep in sync with src/config/brokers.ts
+│   │   └── oms_endpoints.py  # One-time seed source for the `oms_endpoints` table, read from .env
 │   ├── dependencies/auth.py # get_current_user, require_admin (JWT + blacklist checks)
 │   ├── services/
 │   │   ├── external_api.py  # httpx calls to external broker API
@@ -107,15 +110,18 @@ backend/
 │   │   ├── store_service.py # upserts into snapshot tables + pipeline_logs
 │   │   ├── pipeline.py      # run_pipeline(): orchestration
 │   │   ├── password_service.py # bcrypt hash/verify (admin panel)
+│   │   ├── encryption_service.py # Fernet encrypt/decrypt (oms_endpoints.encrypted_password)
 │   │   ├── jwt_service.py      # access/refresh token create + decode (admin panel)
 │   │   ├── user_service.py     # admin `users` table CRUD + seed_default_admin
-│   │   └── broker_service.py   # admin `brokers` table CRUD + seed_brokers (+ pipeline broker list)
+│   │   ├── broker_service.py   # admin `brokers` table CRUD + seed_brokers (+ pipeline broker list)
+│   │   └── oms_endpoint_service.py # admin `oms_endpoints` table CRUD + seed + get_active_endpoints(db)
 │   ├── scheduler/jobs.py    # APScheduler: startup run + daily cron
 │   └── routers/
 │       ├── internal.py      # /api/internal/* endpoints (pipeline data, unauthenticated)
 │       ├── auth.py          # /auth/* — login, refresh, logout, change-password, me
 │       ├── admin_brokers.py # /admin/brokers/* — admin-only broker CRUD
-│       └── admin_users.py   # /admin/users/* — admin-only user CRUD
+│       ├── admin_users.py   # /admin/users/* — admin-only user CRUD
+│       └── admin_oms_endpoints.py # /admin/oms-endpoints/* — admin-only OMS endpoint CRUD
 └── requirements.txt
 ```
 
@@ -157,12 +163,14 @@ export const ENDPOINTS = {
   changePassword: '/auth/change-password',
   me:             '/auth/me',
 
-  adminBrokers: '/admin/brokers/',
-  adminUsers:   '/admin/users/',
+  adminBrokers:      '/admin/brokers/',
+  adminUsers:        '/admin/users/',
+  adminOmsEndpoints: '/admin/oms-endpoints/',
 };
 
-// adminBrokerById(brokerId) -> `/admin/brokers/${brokerId}`
-// adminUserById(id)         -> `/admin/users/${id}`
+// adminBrokerById(brokerId)     -> `/admin/brokers/${brokerId}`
+// adminUserById(id)             -> `/admin/users/${id}`
+// adminOmsEndpointByName(name)  -> `/admin/oms-endpoints/${name}`
 
 // Threshold for market-share color coding (%)
 export const MARKET_SHARE_THRESHOLD = 5;
@@ -179,19 +187,16 @@ export const MARKET_SHARE_THRESHOLD = 5;
 ## Backend: Auto-Credential Pipeline (`/backend`)
 
 A FastAPI + MySQL service replaces the old client-side login flow. It
-authenticates against the external broker API
-(`https://uat.xfltrade.com:20121`) using a fixed service account, runs on a
-daily schedule (plus once at startup), and caches the latest broker/market data
-in MySQL for the frontend to read via internal endpoints.
+authenticates against **three** external OMS APIs (primary, secondary, PUJI —
+see "Multi-endpoint OMS routing" below) using fixed service accounts, runs on
+a daily schedule (plus once at startup), and caches the latest broker/market
+data in MySQL for the frontend to read via internal endpoints.
 
 ### Configuration (`backend/.env`, see `backend/.env.example`)
 
 | Var | Purpose |
 |-----|---------|
-| `EXTERNAL_API_BASE_URL` | External broker API base (`https://uat.xfltrade.com:20121`) |
-| `APP_TYPE` | `appType` field sent to `/api/login` |
-| `AUTO_AUTH_USERNAME` / `AUTO_AUTH_PASSWORD` | Service-account credentials |
-| `AUTO_AUTH_DEVICE_ID` | Fixed device UUID for the service account (MFA assumed disabled) |
+| `APP_ENCRYPTION_KEY` | Fernet symmetric key used to encrypt/decrypt `oms_endpoints.encrypted_password`. Required before creating any `oms_endpoints` row. Generate with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`. **Rotating this key breaks all existing encrypted passwords** (`InvalidToken` on decrypt) — rotation requires manually re-entering every endpoint's password via the admin UI afterward |
 | `SCHEDULED_TIME` | Daily pipeline run time, `HH:MM` (default `06:00`) |
 | `APP_TIMEZONE` | Timezone for scheduling + "today" computation (default `Asia/Dhaka`) |
 | `DEFAULT_STOCK_EXCHANGE` | Stock exchange used for the market fetch (default `DSE`) |
@@ -200,33 +205,99 @@ in MySQL for the frontend to read via internal endpoints.
 | `BACKEND_HOST` / `BACKEND_PORT` | Uvicorn bind address |
 | `CORS_ALLOW_ORIGINS` | Allowed origins for the frontend dev server |
 
-`JWT_ACCESS_TOKEN`/`JWT_REFRESH_TOKEN` in `.env.example` are documentation
-placeholders only — the live token cache lives in the `token_store` MySQL
-table, not the `.env` file.
+There is no `.env`-based bootstrap for OMS API base URLs or service-account
+credentials — those live exclusively in the `oms_endpoints` database table,
+created and edited via the admin panel (**API Endpoints**,
+`/admin/oms-endpoints`). On a fresh install the table starts empty; an admin
+must create the `primary` (and `secondary`/`puji`/`market`, as needed) rows
+there before the pipeline has anything to fetch. The live token cache lives
+in the `token_store` MySQL table, not the `.env` file.
+
+### Multi-endpoint OMS routing
+
+The OMS endpoint registry is a real DB-backed entity, the `oms_endpoints`
+table (`name` PK, `base_url`, `credential_name`, `username`,
+`encrypted_password`, `device_id`, `app_type`), managed via the admin panel
+(**API Endpoints**, `/admin/oms-endpoints`, see "Admin Panel: Auth & User
+Management" below) — not `.env` edits + a restart. `app/services/
+oms_endpoint_service.get_active_endpoints(db) -> dict[str, OmsEndpoint]`
+reads this table and decrypts each row's password (Fernet, via
+`encryption_service.py`) into the same `OmsEndpoint`/`CredentialSet` frozen
+dataclasses (`app/config.py`) that `auth_service.py`/`external_api.py`/
+`fetch_service.py` have always consumed — those three modules are unchanged.
+
+Each `brokers` row has an `api_endpoint` column (nullable; defaults to
+`"primary"` when unset, FK → `oms_endpoints.name`) saying which one OMS
+endpoint that broker's data is fetched from — **a broker belongs to exactly
+one endpoint**, never queried against more than one. `app/config_data/
+brokers.py` seeds this (`FCS` → `"puji"`, matching its dedicated credential
+username `fcs_xfl_broker_trade_api`; all others → `"primary"`); admins can
+reassign a broker's endpoint via `PUT /admin/brokers/{broker_id}`
+(`apiEndpoint` field, now a dropdown sourced from `oms_endpoints` in
+`BrokerManagement.tsx`), and that assignment is never overwritten by the
+seed/backfill logic once set. Deleting an `oms_endpoints` row is blocked
+(409) while any broker still references it — both at the app level
+(`oms_endpoint_service.delete_oms_endpoint`) and the DB level (FK `ON DELETE
+RESTRICT`).
+
+Market-trade-info is fetched using a dedicated `oms_endpoints` row named
+`"market"` (`oms_endpoint_service.get_endpoint_credentials(db, "market")`),
+separate from any broker-data endpoint — it is not part of `brokers.
+api_endpoint` routing and brokers never reference it. The pipeline raises if
+no `"market"` row exists, since the market fetch has no `.env` fallback
+anymore — an admin must create this row (typically `credential_name=
+"market_trade"`, the existing `token_store` key) before the first run.
+
+Adding a new OMS endpoint (including `"market"` on a fresh install): create
+it via the admin UI (`/admin/oms-endpoints`) with its base URL + credentials,
+then route brokers to it via `/admin/brokers` — no pipeline code changes, no
+redeploy. There is no seed step; `oms_endpoints` starts empty on a fresh
+database and is populated entirely through the admin panel.
 
 ### Pipeline (`app/services/pipeline.py` → `run_pipeline()`)
 
-1. Get a valid access token (`token_store` row; refresh if expiring within
-   `TOKEN_REFRESH_SKEW_MINUTES`, or full login if no row exists).
+1. Determine which endpoints have at least one pipeline-enabled broker routed
+   to them, and acquire a token for each (`token_store` row per
+   `credentials.name`; refresh if expiring within `TOKEN_REFRESH_SKEW_MINUTES`,
+   full login if no row exists). A token failure on one endpoint is isolated —
+   it does not block acquiring tokens for the others.
 2. Compute "today" in `APP_TIMEZONE`.
 3. Fetch all pipeline-enabled brokers (`broker_service.list_brokers_for_pipeline()`
    — rows in the `brokers` table with a non-null `external_api_id`, ordered by
-   `order_index`; sequential, per-broker error isolation) + market trade info
-   for `DEFAULT_STOCK_EXCHANGE`.
-4. If **all** brokers failed, refresh the token once and retry the fetch.
+   `order_index`), grouped by `api_endpoint` and fetched from that endpoint's
+   base URL/token; per-broker error isolation. Separately fetch market trade
+   info for `DEFAULT_STOCK_EXCHANGE` using the dedicated `"market"`
+   `oms_endpoints` row (its own token, acquired the same way as a broker
+   endpoint's).
+4. For any endpoint where **all** of its brokers failed, refresh that
+   endpoint's token once and retry just that endpoint's brokers (endpoints
+   that already succeeded are not re-fetched).
 5. Upsert results into `broker_snapshots` / `market_snapshots`.
-6. Record the run in `pipeline_logs` with status `success` / `partial` / `failed`.
+6. Record the run in `pipeline_logs` with status `success` / `partial` / `failed`,
+   plus a log line summarizing per-endpoint auth/fetch outcomes.
 
 If `isMfaRequired` is returned during login, the cycle is logged as `failed`
-and skipped (MFA is assumed disabled for the service account).
+and skipped (MFA is assumed disabled for all service accounts).
 
 ### MySQL tables (auto-created via `Base.metadata.create_all()`)
 
-- `token_store` — single row (`id=1`): `access_token`, `refresh_token`,
-  `expires_at`, `user_id`, `updated_at`.
+- `oms_endpoints` — one row per OMS endpoint (`name` PK, e.g. `"primary"`,
+  `"secondary"`, `"puji"`, `"market"`): `base_url`, `credential_name` (unique,
+  the `token_store` row key, e.g. `"puji_oms"` — distinct from `name` so
+  `token_store` keys stay stable even if an endpoint is renamed-by-recreation),
+  `username`, `encrypted_password` (Fernet, via `encryption_service.py`),
+  `device_id`, `app_type`, timestamps. Starts empty on a fresh database —
+  fully admin-managed via `/admin/oms-endpoints`, no `.env` seed. See
+  "Multi-endpoint OMS routing" above.
+- `token_store` — one row per `credential_name` (e.g. `broker_summary`,
+  `market_trade`, `secondary_oms`, `puji_oms`): `access_token`,
+  `refresh_token`, `expires_at`, `user_id`, `updated_at`.
 - `broker_snapshots` — one row per `(broker_id, from_date, to_date)`, upserted:
   `total_execution_report`, `total_trade`, `buy_trade`, `sell_trade`,
   `total_value`, `buy_value`, `sell_value`, `fetch_error`, `fetched_at`.
+  `broker_id` here is the internal `brokers.broker_id` (e.g. `"FCS"`), not the
+  OMS-side id — since each broker is routed to exactly one endpoint, this key
+  remains unique across all endpoints with no schema change needed.
 - `market_snapshots` — one row per `(stock_exchange, snapshot_date)`, upserted:
   `market_date`, `low`, `volume`, `trade`, `value`, `gainer`, `loser`,
   `unchanged`, `fetched_at`.
@@ -253,15 +324,21 @@ and skipped (MFA is assumed disabled for the service account).
 - `GET /api/internal/market-data` → `MarketDataResponse` — most recent snapshot
   for `DEFAULT_STOCK_EXCHANGE`, or `{ success: false, market: null }` if none.
 - `GET /api/internal/token-status` → token validity, `expiresAt`,
-  `nextScheduledRun` (from the scheduler), and the most recent `pipeline_logs` row.
+  `nextScheduledRun` (from the scheduler), the most recent `pipeline_logs`
+  row, and an `endpoints` array with per-OMS-endpoint token health
+  (`endpoint`, `hasToken`, `valid`, `expiresAt`, `lastUpdated`) — the
+  top-level `hasToken`/`valid`/`expiresAt`/`lastUpdated` fields remain the
+  primary endpoint's status for backward compatibility.
 - `POST /api/internal/trigger-pipeline` → runs `run_pipeline()` in the
   background, returns `{ "triggered": true }` (manual/testing use).
 
 > Important: `app/config_data/brokers.py` must be kept in sync with
 > `src/config/brokers.ts` (same broker IDs/labels, same order) — it's the
-> seed/backfill source for the `brokers` table's `external_api_id` and
-> `order_index` columns (matched by `broker_label`), which is what the
-> pipeline and `/api/internal/broker-data` actually read at runtime.
+> seed/backfill source for the `brokers` table's `external_api_id`,
+> `order_index`, and `api_endpoint` columns (matched by `broker_label`),
+> which is what the pipeline and `/api/internal/broker-data` actually read at
+> runtime. `src/config/brokers.ts` does not need `api_endpoint` — that's a
+> backend-only routing concern.
 
 See `backend/README.md` for setup/run instructions.
 
@@ -285,16 +362,25 @@ password).
 
 ### MySQL tables (auto-created via `Base.metadata.create_all()`)
 
+(`oms_endpoints` is documented under "Multi-endpoint OMS routing" /
+"Backend: Auto-Credential Pipeline" above — it's a single registry shared by
+both the pipeline and this admin module, not duplicated here.)
+
 - `brokers` — `broker_id` (PK, e.g. `"SNM"`), `broker_label`, `external_api_id`
   (24-char external-API ObjectId, nullable), `order_index` (nullable),
+  `api_endpoint` (nullable; `"primary"` / `"secondary"` / `"puji"`, see
+  "Multi-endpoint OMS routing" above — `NULL` is treated as `"primary"`),
   timestamps. Seeded from `app/config_data/brokers.py` on first startup
-  (`broker_service.seed_brokers`, including `external_api_id`/`order_index`),
-  editable thereafter via the admin panel. This table is now the runtime
-  source for the pipeline's broker list (see `list_brokers_for_pipeline`):
-  rows with a non-null `external_api_id` are fetched, ordered by
-  `order_index`. Brokers added via the admin UI with no matching
-  `config_data/brokers.py` entry have `external_api_id`/`order_index = NULL`
-  and are excluded from the pipeline (admin-CRUD/user-assignment only).
+  (`broker_service.seed_brokers`, including `external_api_id`/`order_index`/
+  `api_endpoint`), editable thereafter via the admin panel — once an
+  `api_endpoint` value is set (seeded or admin-edited) it is never
+  overwritten by the seed/backfill logic again. This table is now the
+  runtime source for the pipeline's broker list (see
+  `list_brokers_for_pipeline`): rows with a non-null `external_api_id` are
+  fetched, grouped by `api_endpoint`, ordered by `order_index`. Brokers added
+  via the admin UI with no matching `config_data/brokers.py` entry have
+  `external_api_id`/`order_index = NULL` and are excluded from the pipeline
+  (admin-CRUD/user-assignment only).
 - `users` — `id`, `email` (unique), `password_hash` (bcrypt via passlib),
   `role` (`admin`/`user`), `broker_id` (nullable FK → `brokers.broker_id`),
   `is_active`, `must_change_password`, timestamps.
@@ -304,17 +390,32 @@ password).
 
 ### Seeding (`app/main.py` lifespan, after `create_all()`)
 
+`app/db/schema_upgrades.ensure_oms_endpoint_fk()` (which adds the
+`brokers.api_endpoint -> oms_endpoints.name` FK) must run **after**
+`broker_service.seed_brokers()` (which backfills `brokers.api_endpoint`) —
+otherwise the `ALTER TABLE ADD CONSTRAINT` could fail against rows that
+don't yet match an `oms_endpoints` row. There is no `oms_endpoints` seed
+step — the table starts empty on a fresh database; an admin populates it via
+`/admin/oms-endpoints` after first login. Full lifespan order:
+`ensure_token_store_credential_name` → `create_all()` →
+`ensure_broker_columns` → `seed_brokers` → `seed_default_admin` →
+`ensure_oms_endpoint_fk` → start scheduler.
+
 - `broker_service.seed_brokers()` — on a fresh `brokers` table, seeds all 15
-  rows (with `external_api_id`/`order_index`) from
+  rows (with `external_api_id`/`order_index`/`api_endpoint`) from
   `app/config_data/brokers.py`. On an existing table, idempotently backfills
-  `external_api_id`/`order_index` for rows where they're still `NULL`,
-  matched by `broker_label` (runs every startup, but is a no-op once
+  `external_api_id`/`order_index`/`api_endpoint` for rows where they're still
+  `NULL`, matched by `broker_label` (runs every startup, but is a no-op once
   backfilled). `app/db/schema_upgrades.ensure_broker_columns()` adds these
-  two columns to a pre-existing `brokers` table before seeding runs, since
+  columns to a pre-existing `brokers` table before seeding runs, since
   `create_all()` doesn't alter existing tables.
 - `user_service.seed_default_admin()` — no-op if `users` is non-empty;
   otherwise creates `admin@xfl.com` / `Admin@1234`, `role="admin"`,
   `must_change_password=True`. **Change this password after first login.**
+- `app/db/schema_upgrades.ensure_oms_endpoint_fk()` — idempotent (skips if
+  the FK already exists); defensively nulls out any `brokers.api_endpoint`
+  value with no matching `oms_endpoints` row (should never fire in the happy
+  path — logged as a warning if it does) before adding the FK constraint.
 
 ### Endpoints
 
@@ -328,6 +429,13 @@ password).
   Delete is blocked (409) if a user references the broker.
 - `GET/POST /admin/users/`, `PUT/DELETE /admin/users/{id}` — admin only.
   Delete is blocked (400) for `current_user.id == id` (no self-deletion).
+- `GET/POST /admin/oms-endpoints/`, `PUT/DELETE /admin/oms-endpoints/{name}`
+  — admin only. `name` is immutable after creation (it's the primary key and
+  the `brokers.api_endpoint` FK target); `credentialName` is also immutable
+  after creation (changing it would orphan the existing `token_store` row).
+  `password` is write-only — never returned by `GET`/`POST`/`PUT` responses;
+  omit/null it on `PUT` to leave the stored password unchanged. Delete is
+  blocked (409) if any `brokers.api_endpoint` row references the endpoint.
 
 ### Frontend
 
@@ -343,8 +451,8 @@ password).
   to `/dashboard`/`/admin` if the user's role isn't in the route's `roles` list.
 - Routes (`src/App.tsx`): `/login` (public), `/` (role-based redirect),
   `/dashboard` (`user`/`admin`), `/profile` (change password, any role),
-  `/admin` (`admin` only) → `AdminLayout` with `/admin/brokers` and
-  `/admin/users`.
+  `/admin` (`admin` only) → `AdminLayout` with `/admin/brokers`,
+  `/admin/users`, and `/admin/oms-endpoints`.
 
 ---
 
@@ -559,11 +667,12 @@ stale or missing snapshot data until the next successful pipeline run.
 | Item | Type | Location |
 |------|------|----------|
 | Broker IDs + labels (frontend) | Hardcoded | `src/config/brokers.ts` |
-| Broker IDs + labels (backend, seed/backfill data) | Hardcoded, must mirror frontend | `backend/app/config_data/brokers.py` |
-| Broker list used by pipeline at runtime | DB (`brokers` table, seeded/backfilled from the above) | `backend/app/models/broker.py` |
+| Broker IDs + labels + OMS endpoint (backend, seed/backfill data) | Hardcoded, IDs/labels must mirror frontend | `backend/app/config_data/brokers.py` |
+| Broker list + OMS endpoint routing used by pipeline at runtime | DB (`brokers` table, seeded/backfilled from the above, admin-editable) | `backend/app/models/broker.py` |
+| OMS endpoint registry (primary/secondary/puji/market base URLs + credentials) | DB only (`oms_endpoints` table, fully admin-managed via `/admin/oms-endpoints`, no `.env` involvement) | `backend/app/models/oms_endpoint.py`, `backend/app/services/oms_endpoint_service.py` |
 | Internal endpoint paths | Hardcoded | `src/config/api.ts` |
 | Market share threshold | Hardcoded const | `src/config/api.ts` |
-| External API base URL, service-account credentials, schedule, DB connection | Env vars | `backend/.env` |
+| Encryption key, schedule, DB connection, JWT settings | Env vars | `backend/.env` |
 | Date range / Stock Exchange | UI-configurable, but no effect on data (v1) | `FilterBar` |
 
 ---

@@ -7,6 +7,7 @@ import Dashboard from './components/Dashboard';
 import AdminLayout from './components/admin/AdminLayout';
 import BrokerManagement from './components/admin/BrokerManagement';
 import UserManagement from './components/admin/UserManagement';
+import EndpointManagement from './components/admin/EndpointManagement';
 
 function RootRedirect() {
   const { user, status } = useAuth();
@@ -47,6 +48,7 @@ export default function App() {
               <Route index element={<Navigate to="/admin/brokers" replace />} />
               <Route path="brokers" element={<BrokerManagement />} />
               <Route path="users" element={<UserManagement />} />
+              <Route path="oms-endpoints" element={<EndpointManagement />} />
             </Route>
           </Route>
 

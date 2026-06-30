@@ -1,10 +1,14 @@
 import logging
+from collections import defaultdict
 
 from sqlalchemy.orm import Session
 
+from app.config import OmsEndpoint
 from app.services import broker_service, external_api
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_ENDPOINT = "primary"
 
 ZERO_BROKER_DATA = {
     "totalExecutionReport": 0,
@@ -17,27 +21,86 @@ ZERO_BROKER_DATA = {
 }
 
 
-def fetch_all(db: Session, broker_token: str, market_token: str, from_date: str, to_date: str, stock_exchange: str):
-    """Fetch broker summaries for all configured brokers and market trade info.
+def _fetch_broker_list(
+    brokers: list,
+    endpoints: dict[str, OmsEndpoint],
+    tokens: dict[str, str],
+    from_date: str,
+    to_date: str,
+) -> list[dict]:
+    """Fetch broker summaries for the given brokers, grouped by the OMS
+    endpoint each broker is routed to (broker.api_endpoint).
 
-    Returns (broker_results, market_data). Each broker_result is
-    {"broker": {...}, "data": dict | None, "fetch_error": bool}.
-    market_data is a dict or None if the market fetch failed.
+    Each broker is fetched independently and failures are isolated per
+    broker: a failure or missing token for one endpoint does not prevent
+    brokers on other endpoints from being fetched.
+
+    Returns a list of {"broker": {...}, "data": dict | None, "fetch_error": bool}.
     """
-    broker_results = []
-    for broker in broker_service.list_brokers_for_pipeline(db):
-        broker_dict = {"id": broker.external_api_id, "label": broker.broker_label}
-        try:
-            data = external_api.fetch_broker_summary(broker_token, broker.external_api_id, from_date, to_date)
-            broker_results.append({"broker": broker_dict, "data": data, "fetch_error": False})
-        except Exception:
-            logger.warning("broker fetch failed: %s (%s)", broker.external_api_id, broker.broker_label, exc_info=True)
-            broker_results.append({"broker": broker_dict, "data": None, "fetch_error": True})
+    by_endpoint: dict[str, list] = defaultdict(list)
+    for broker in brokers:
+        by_endpoint[broker.api_endpoint or DEFAULT_ENDPOINT].append(broker)
 
+    broker_results = []
+    for endpoint_name, endpoint_brokers in by_endpoint.items():
+        endpoint = endpoints.get(endpoint_name)
+        token = tokens.get(endpoint_name)
+
+        for broker in endpoint_brokers:
+            broker_dict = {"id": broker.external_api_id, "label": broker.broker_label}
+
+            if endpoint is None or token is None:
+                logger.warning(
+                    "no token for endpoint=%s; skipping broker %s (%s)",
+                    endpoint_name, broker.external_api_id, broker.broker_label,
+                )
+                broker_results.append({"broker": broker_dict, "data": None, "fetch_error": True})
+                continue
+
+            try:
+                data = external_api.fetch_broker_summary(
+                    endpoint.base_url, token, broker.external_api_id, from_date, to_date
+                )
+                broker_results.append({"broker": broker_dict, "data": data, "fetch_error": False})
+            except Exception:
+                logger.warning(
+                    "broker fetch failed: endpoint=%s broker=%s (%s)",
+                    endpoint_name, broker.external_api_id, broker.broker_label, exc_info=True,
+                )
+                broker_results.append({"broker": broker_dict, "data": None, "fetch_error": True})
+
+    return broker_results
+
+
+def fetch_brokers(
+    db: Session,
+    endpoints: dict[str, OmsEndpoint],
+    tokens: dict[str, str],
+    from_date: str,
+    to_date: str,
+) -> list[dict]:
+    """Fetch broker summaries for all pipeline-enabled brokers (see
+    `_fetch_broker_list` for the per-endpoint fetch/error-isolation logic)."""
+    brokers = broker_service.list_brokers_for_pipeline(db)
+    return _fetch_broker_list(brokers, endpoints, tokens, from_date, to_date)
+
+
+def fetch_brokers_subset(
+    brokers: list,
+    endpoints: dict[str, OmsEndpoint],
+    tokens: dict[str, str],
+    from_date: str,
+    to_date: str,
+) -> list[dict]:
+    """Fetch broker summaries for an explicit broker list (e.g. retrying only
+    the brokers on endpoints whose token was just refreshed)."""
+    return _fetch_broker_list(brokers, endpoints, tokens, from_date, to_date)
+
+
+def fetch_market(endpoint: OmsEndpoint, token: str, stock_exchange: str) -> dict | None:
+    """Fetch market trade info from the given endpoint. Returns None on failure."""
     try:
-        market_data = external_api.fetch_market_trade_info(market_token, stock_exchange)
+        return external_api.fetch_market_trade_info(endpoint.base_url, token, stock_exchange)
     except Exception:
         logger.warning("market fetch failed for %s", stock_exchange, exc_info=True)
-        market_data = None
-
-    return broker_results, market_data
+        return None

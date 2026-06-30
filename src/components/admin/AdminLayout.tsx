@@ -38,6 +38,7 @@ export default function AdminLayout() {
         <nav className="w-48 flex-shrink-0 space-y-1">
           <NavLink to="/admin/brokers" className={navLinkClass}>Brokers</NavLink>
           <NavLink to="/admin/users" className={navLinkClass}>Users</NavLink>
+          <NavLink to="/admin/oms-endpoints" className={navLinkClass}>API Endpoints</NavLink>
         </nav>
 
         <main className="flex-1 min-w-0">

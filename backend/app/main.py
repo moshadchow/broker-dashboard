@@ -6,9 +6,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.db.base import Base
-from app.db.schema_upgrades import ensure_broker_columns, ensure_token_store_credential_name
+from app.db.schema_upgrades import (
+    ensure_broker_columns,
+    ensure_oms_endpoint_fk,
+    ensure_token_store_credential_name,
+)
 from app.db.session import SessionLocal, engine
-from app.routers import admin_brokers, admin_users, auth, dashboard, internal
+from app.routers import admin_brokers, admin_oms_endpoints, admin_users, auth, dashboard, internal
 from app.scheduler.jobs import start_scheduler, stop_scheduler
 from app.services import broker_service, user_service
 
@@ -27,6 +31,8 @@ async def lifespan(app: FastAPI):
         user_service.seed_default_admin(db)
     finally:
         db.close()
+
+    ensure_oms_endpoint_fk(engine)
 
     start_scheduler()
     yield
@@ -48,3 +54,4 @@ app.include_router(dashboard.router)
 app.include_router(auth.router)
 app.include_router(admin_brokers.router)
 app.include_router(admin_users.router)
+app.include_router(admin_oms_endpoints.router)

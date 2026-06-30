@@ -36,7 +36,7 @@ def _build_series(
     market_by_date: dict[date, dict[str, float]],
     metric: str,
     show_own_broker: bool,
-    own_broker_id: str | None,
+    own_external_api_id: str | None,
 ) -> TrendSeries:
     own_broker: list[float] = []
     xfl: list[float] = []
@@ -53,7 +53,7 @@ def _build_series(
         market.append(market_value)
 
         if show_own_broker:
-            own_value = broker_values.get(own_broker_id, {}).get(metric, 0.0)
+            own_value = broker_values.get(own_external_api_id, {}).get(metric, 0.0)
             own_broker.append(own_value)
             pct_of_xfl.append((own_value / xfl_total * 100) if xfl_total > 0 else 0.0)
             pct_of_market.append((own_value / market_value * 100) if market_value > 0 else 0.0)
@@ -110,10 +110,12 @@ def get_trend(
     show_own_broker = current_user.role == "user" and current_user.broker_id is not None
 
     own_broker_label: str | None = None
+    own_external_api_id: str | None = None
     if show_own_broker:
         own_broker = db.get(Broker, current_user.broker_id)
         if own_broker is not None:
             own_broker_label = own_broker.broker_label
+            own_external_api_id = own_broker.external_api_id
 
     dates = _date_range(fromDate, toDate)
 
@@ -121,10 +123,10 @@ def get_trend(
         success=True,
         dates=[day.isoformat() for day in dates],
         trades=_build_series(
-            dates, by_date_broker, market_by_date, "trade", show_own_broker, current_user.broker_id
+            dates, by_date_broker, market_by_date, "trade", show_own_broker, own_external_api_id
         ),
         value=_build_series(
-            dates, by_date_broker, market_by_date, "value", show_own_broker, current_user.broker_id
+            dates, by_date_broker, market_by_date, "value", show_own_broker, own_external_api_id
         ),
         ownBrokerLabel=own_broker_label,
     )

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import * as adminService from '../../services/adminService';
-import type { AdminBroker } from '../../types/auth';
+import type { AdminBroker, AdminOmsEndpoint } from '../../types/auth';
 
 const TH = ({ children }: { children: React.ReactNode }) => (
   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">
@@ -14,23 +14,31 @@ const TD = ({ children, className = '', colSpan }: { children: React.ReactNode; 
 
 export default function BrokerManagement() {
   const [brokers, setBrokers] = useState<AdminBroker[]>([]);
+  const [omsEndpoints, setOmsEndpoints] = useState<AdminOmsEndpoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [newBrokerId, setNewBrokerId] = useState('');
   const [newBrokerLabel, setNewBrokerLabel] = useState('');
   const [newExternalApiId, setNewExternalApiId] = useState('');
+  const [newApiEndpoint, setNewApiEndpoint] = useState('');
   const [creating, setCreating] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState('');
   const [editExternalApiId, setEditExternalApiId] = useState('');
+  const [editApiEndpoint, setEditApiEndpoint] = useState('');
 
   async function load() {
     setLoading(true);
     setError(null);
     try {
-      setBrokers(await adminService.listBrokers());
+      const [brokerList, endpointList] = await Promise.all([
+        adminService.listBrokers(),
+        adminService.listOmsEndpoints(),
+      ]);
+      setBrokers(brokerList);
+      setOmsEndpoints(endpointList);
     } catch {
       setError('Failed to load brokers.');
     } finally {
@@ -50,10 +58,12 @@ export default function BrokerManagement() {
       const brokerId = newBrokerId.trim().toUpperCase();
       const brokerLabel = newBrokerLabel.trim();
       const externalApiId = newExternalApiId.trim() || null;
-      await adminService.createBroker({ brokerId, brokerLabel, externalApiId });
+      const apiEndpoint = newApiEndpoint || null;
+      await adminService.createBroker({ brokerId, brokerLabel, externalApiId, apiEndpoint });
       setNewBrokerId('');
       setNewBrokerLabel('');
       setNewExternalApiId('');
+      setNewApiEndpoint('');
       await load();
     } catch {
       setError('Failed to create broker. The broker ID may already exist.');
@@ -66,13 +76,15 @@ export default function BrokerManagement() {
     setEditingId(broker.brokerId);
     setEditLabel(broker.brokerLabel);
     setEditExternalApiId(broker.externalApiId ?? '');
+    setEditApiEndpoint(broker.apiEndpoint ?? '');
   }
 
   async function saveEdit(brokerId: string) {
     setError(null);
     try {
       const externalApiId = editExternalApiId.trim() || null;
-      await adminService.updateBroker(brokerId, { brokerLabel: editLabel.trim(), externalApiId });
+      const apiEndpoint = editApiEndpoint || null;
+      await adminService.updateBroker(brokerId, { brokerLabel: editLabel.trim(), externalApiId, apiEndpoint });
       setEditingId(null);
       await load();
     } catch {
@@ -142,6 +154,20 @@ export default function BrokerManagement() {
           />
         </div>
 
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">API Endpoint</label>
+          <select
+            value={newApiEndpoint}
+            onChange={e => setNewApiEndpoint(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-40 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">— default (primary) —</option>
+            {omsEndpoints.map(endpoint => (
+              <option key={endpoint.name} value={endpoint.name}>{endpoint.name}</option>
+            ))}
+          </select>
+        </div>
+
         <button
           type="submit"
           disabled={creating}
@@ -158,16 +184,17 @@ export default function BrokerManagement() {
               <TH>Broker ID</TH>
               <TH>Label</TH>
               <TH>External API ID</TH>
+              <TH>API Endpoint</TH>
               <TH>Updated</TH>
               <TH>Actions</TH>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loading && (
-              <tr><TD className="text-gray-400" colSpan={5}>Loading…</TD></tr>
+              <tr><TD className="text-gray-400" colSpan={6}>Loading…</TD></tr>
             )}
             {!loading && brokers.length === 0 && (
-              <tr><TD className="text-gray-400" colSpan={5}>No brokers yet.</TD></tr>
+              <tr><TD className="text-gray-400" colSpan={6}>No brokers yet.</TD></tr>
             )}
             {!loading && brokers.map(broker => (
               <tr key={broker.brokerId} className="hover:bg-gray-50">
@@ -195,6 +222,22 @@ export default function BrokerManagement() {
                     />
                   ) : (
                     broker.externalApiId ?? <span className="text-gray-400">—</span>
+                  )}
+                </TD>
+                <TD>
+                  {editingId === broker.brokerId ? (
+                    <select
+                      value={editApiEndpoint}
+                      onChange={e => setEditApiEndpoint(e.target.value)}
+                      className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-36 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">— default (primary) —</option>
+                      {omsEndpoints.map(endpoint => (
+                        <option key={endpoint.name} value={endpoint.name}>{endpoint.name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    broker.apiEndpoint ?? <span className="text-gray-400">primary</span>
                   )}
                 </TD>
                 <TD>{new Date(broker.updatedAt).toLocaleString()}</TD>

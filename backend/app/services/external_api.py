@@ -1,7 +1,5 @@
 import httpx
 
-from app.config import settings
-
 REQUEST_TIMEOUT = 30
 
 
@@ -17,9 +15,9 @@ class MfaRequiredError(ExternalAuthError):
     """Raised when the external API requires MFA for the service account."""
 
 
-def login(username: str, password: str, device_id: str, app_type: int) -> dict:
+def login(base_url: str, username: str, password: str, device_id: str, app_type: int) -> dict:
     resp = httpx.post(
-        f"{settings.external_api_base_url}/api/login",
+        f"{base_url}/api/login",
         json={
             "loginId": username,
             "password": password,
@@ -43,9 +41,9 @@ def login(username: str, password: str, device_id: str, app_type: int) -> dict:
     return data
 
 
-def refresh_token(access_token: str, refresh_token_value: str, device_id: str) -> dict:
+def refresh_token(base_url: str, access_token: str, refresh_token_value: str, device_id: str) -> dict:
     resp = httpx.post(
-        f"{settings.external_api_base_url}/api/login/refresh-token",
+        f"{base_url}/api/login/refresh-token",
         json={
             "accessToken": access_token,
             "refreshToken": refresh_token_value,
@@ -64,9 +62,9 @@ def refresh_token(access_token: str, refresh_token_value: str, device_id: str) -
     return data
 
 
-def fetch_broker_summary(access_token: str, broker_id: str, from_date: str, to_date: str) -> dict:
+def fetch_broker_summary(base_url: str, access_token: str, broker_id: str, from_date: str, to_date: str) -> dict:
     resp = httpx.get(
-        f"{settings.external_api_base_url}/api/broker-summary/orders-execution",
+        f"{base_url}/api/broker-summary/orders-execution",
         params={"fromDate": from_date, "toDate": to_date},
         headers={"Authorization": f"Bearer {access_token}", "X-BrokerId": broker_id},
         timeout=REQUEST_TIMEOUT,
@@ -78,9 +76,9 @@ def fetch_broker_summary(access_token: str, broker_id: str, from_date: str, to_d
     return body["data"]
 
 
-def fetch_market_trade_info(access_token: str, stock_exchange: str) -> dict:
+def fetch_market_trade_info(base_url: str, access_token: str, stock_exchange: str) -> dict:
     resp = httpx.get(
-        f"{settings.external_api_base_url}/api/indexes/{stock_exchange}/market-trade-info",
+        f"{base_url}/api/indexes/{stock_exchange}/market-trade-info",
         headers={"Authorization": f"Bearer {access_token}"},
         timeout=REQUEST_TIMEOUT,
     )

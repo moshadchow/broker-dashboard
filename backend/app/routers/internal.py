@@ -14,9 +14,9 @@ from app.models.token_store import TokenStore
 from app.models.user import User
 from app.schemas.broker import BrokerAggregateOut, BrokerDataResponse, BrokerRowOut
 from app.schemas.market import MarketDataResponse, MarketRowOut
-from app.schemas.token import LastPipelineRun, TokenStatusResponse
+from app.schemas.token import EndpointTokenStatus, LastPipelineRun, TokenStatusResponse
 from app.scheduler.jobs import DAILY_JOB_ID, scheduler
-from app.services import broker_service
+from app.services import broker_service, oms_endpoint_service
 from app.services.fetch_service import ZERO_BROKER_DATA
 from app.services.pipeline import run_pipeline
 from app.utils.time import is_expiring_soon, today_local
@@ -152,7 +152,7 @@ def get_market_data(
 
 @router.get("/token-status", response_model=TokenStatusResponse)
 def get_token_status(db: Session = Depends(get_db)) -> TokenStatusResponse:
-    token = db.get(TokenStore, settings.broker_summary_credentials.name)
+    token = db.get(TokenStore, "broker_summary")
     last_log = db.scalar(select(PipelineLog).order_by(PipelineLog.id.desc()).limit(1))
 
     job = scheduler.get_job(DAILY_JOB_ID)
@@ -168,6 +168,26 @@ def get_token_status(db: Session = Depends(get_db)) -> TokenStatusResponse:
             marketOk=last_log.market_ok,
         )
 
+    endpoint_statuses: list[EndpointTokenStatus] = []
+    for endpoint_name, endpoint in oms_endpoint_service.get_active_endpoints(db).items():
+        endpoint_token = db.get(TokenStore, endpoint.credentials.name)
+        if endpoint_token is None:
+            endpoint_statuses.append(
+                EndpointTokenStatus(
+                    endpoint=endpoint_name, hasToken=False, valid=False, expiresAt=None, lastUpdated=None
+                )
+            )
+            continue
+        endpoint_statuses.append(
+            EndpointTokenStatus(
+                endpoint=endpoint_name,
+                hasToken=True,
+                valid=not is_expiring_soon(endpoint_token.expires_at, settings.token_refresh_skew_minutes),
+                expiresAt=_aware_utc(endpoint_token.expires_at),
+                lastUpdated=_aware_utc(endpoint_token.updated_at),
+            )
+        )
+
     if token is None:
         return TokenStatusResponse(
             hasToken=False,
@@ -176,6 +196,7 @@ def get_token_status(db: Session = Depends(get_db)) -> TokenStatusResponse:
             lastUpdated=None,
             nextScheduledRun=next_run,
             lastPipelineRun=last_pipeline_run,
+            endpoints=endpoint_statuses,
         )
 
     valid = not is_expiring_soon(token.expires_at, settings.token_refresh_skew_minutes)
@@ -187,6 +208,7 @@ def get_token_status(db: Session = Depends(get_db)) -> TokenStatusResponse:
         lastUpdated=_aware_utc(token.updated_at),
         nextScheduledRun=next_run,
         lastPipelineRun=last_pipeline_run,
+        endpoints=endpoint_statuses,
     )
 
 

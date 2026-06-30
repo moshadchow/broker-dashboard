@@ -35,7 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.config import CredentialSet, settings  # noqa: E402
 from app.db.session import SessionLocal  # noqa: E402
-from app.services import auth_service, fetch_service, store_service  # noqa: E402
+from app.services import auth_service, broker_service, fetch_service, oms_endpoint_service, store_service  # noqa: E402
 from app.services.auth_service import NoTokenError  # noqa: E402
 from app.services.external_api import ExternalAuthError, MfaRequiredError  # noqa: E402
 
@@ -50,6 +50,27 @@ def get_or_refresh_token(db, credentials: CredentialSet) -> str:
         return auth_service.auth(db, credentials)
 
 
+def get_tokens_for_active_endpoints(db) -> dict[str, str]:
+    """Log in/refresh a token per OMS endpoint that has at least one
+    pipeline-enabled broker routed to it, isolating failures per endpoint."""
+    endpoints = oms_endpoint_service.get_active_endpoints(db)
+    active_names = {
+        broker.api_endpoint or fetch_service.DEFAULT_ENDPOINT
+        for broker in broker_service.list_brokers_for_pipeline(db)
+    }
+    tokens: dict[str, str] = {}
+    for name in active_names:
+        endpoint = endpoints.get(name)
+        if endpoint is None or not endpoint.base_url:
+            logger.warning("endpoint=%s has no base_url configured; skipping", name)
+            continue
+        try:
+            tokens[name] = get_or_refresh_token(db, endpoint.credentials)
+        except (MfaRequiredError, ExternalAuthError, NoTokenError) as exc:
+            logger.warning("auth failed: endpoint=%s (%s)", name, exc)
+    return tokens
+
+
 def run(from_date: date, to_date: date, stock_exchange: str) -> None:
     db = SessionLocal()
     try:
@@ -58,12 +79,15 @@ def run(from_date: date, to_date: date, stock_exchange: str) -> None:
             day_str = current.strftime("%Y-%m-%d")
             logger.info("=== %s ===", day_str)
 
-            broker_token = get_or_refresh_token(db, settings.broker_summary_credentials)
-            market_token = get_or_refresh_token(db, settings.market_credentials)
+            tokens = get_tokens_for_active_endpoints(db)
+            market_creds = oms_endpoint_service.get_endpoint_credentials(db, "market")
+            if market_creds is None:
+                raise NoTokenError("no 'market' OMS endpoint configured")
+            market_token = get_or_refresh_token(db, market_creds)
 
-            broker_results, market_data = fetch_service.fetch_all(
-                db, broker_token, market_token, day_str, day_str, stock_exchange
-            )
+            endpoints = oms_endpoint_service.get_active_endpoints(db)
+            broker_results = fetch_service.fetch_brokers(db, endpoints, tokens, day_str, day_str)
+            market_data = fetch_service.fetch_market(endpoints["primary"], market_token, stock_exchange)
             if not broker_results:
                 logger.warning("%s: no pipeline-enabled brokers found in `brokers` table", day_str)
 

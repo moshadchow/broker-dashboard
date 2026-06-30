@@ -33,6 +33,7 @@ def upsert_token(db: Session, credential_name: str, data: dict) -> None:
 def auth(db: Session, credentials: CredentialSet) -> str:
     """Full login using .env service-account credentials. Raises MfaRequiredError if MFA is required."""
     data = external_api.login(
+        credentials.base_url,
         credentials.username,
         credentials.password,
         credentials.device_id,
@@ -44,6 +45,7 @@ def auth(db: Session, credentials: CredentialSet) -> str:
 
 def do_refresh(db: Session, token: TokenStore, credentials: CredentialSet) -> str:
     data = external_api.refresh_token(
+        credentials.base_url,
         token.access_token,
         token.refresh_token,
         credentials.device_id,

@@ -84,9 +84,6 @@ Edit `backend/.env` and fill in real values:
 
 | Variable | Value |
 |---|---|
-| `EXTERNAL_API_BASE_URL` | `https://uat.xfltrade.com:20121` (or prod URL) |
-| `AUTO_AUTH_USERNAME` / `AUTO_AUTH_PASSWORD` | Real service-account credentials |
-| `AUTO_AUTH_DEVICE_ID` | Fixed device UUID for the service account |
 | `SCHEDULED_TIME` | e.g. `06:00` |
 | `APP_TIMEZONE` | e.g. `Asia/Dhaka` |
 | `DEFAULT_STOCK_EXCHANGE` | e.g. `DSE` |
@@ -102,11 +99,23 @@ Edit `backend/.env` and fill in real values:
 | `JWT_ALGORITHM` | `HS256` |
 | `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | `30` |
 | `JWT_REFRESH_TOKEN_EXPIRE_DAYS` | `7` |
+| `APP_ENCRYPTION_KEY` | generate below — required before creating any OMS endpoint |
+
+OMS API endpoints (base URLs + service-account credentials for
+primary/secondary/puji/market) are **not** set via `.env` — after first
+startup, log in as the seeded default admin and create them at
+`/admin/oms-endpoints`. See `CLAUDE.md` "Multi-endpoint OMS routing".
 
 Generate a strong JWT secret:
 
 ```bash
 python3 -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+Generate the Fernet encryption key (for OMS endpoint credentials at rest):
+
+```bash
+python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
 ### Test run
@@ -117,7 +126,13 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 Confirm:
 - No startup errors (tables are auto-created on first run)
-- Logs show the scheduler starting and a pipeline run executing
+- Log in as the seeded default admin (`admin@xfl.com` / `Admin@1234`,
+  change the password immediately) and create your OMS endpoint rows at
+  `/admin/oms-endpoints` (`primary`, plus `secondary`/`puji`/`market` as
+  needed) — the pipeline has nothing to fetch until at least `primary`
+  exists
+- Trigger a pipeline run (`POST /api/internal/trigger-pipeline`) and check
+  logs show successful auth/fetch per endpoint
 - `curl http://127.0.0.1:8000/api/internal/token-status` returns JSON
 
 Stop with `Ctrl+C` once verified.

@@ -11,6 +11,14 @@ class LastPipelineRun(BaseModel):
     marketOk: bool
 
 
+class EndpointTokenStatus(BaseModel):
+    endpoint: str
+    hasToken: bool
+    valid: bool
+    expiresAt: datetime | None
+    lastUpdated: datetime | None
+
+
 class TokenStatusResponse(BaseModel):
     hasToken: bool
     valid: bool
@@ -18,3 +26,4 @@ class TokenStatusResponse(BaseModel):
     lastUpdated: datetime | None
     nextScheduledRun: datetime | None
     lastPipelineRun: LastPipelineRun | None
+    endpoints: list[EndpointTokenStatus]

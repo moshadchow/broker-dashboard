@@ -1,10 +1,13 @@
-import { ENDPOINTS, adminBrokerById, adminUserById } from '../config/api';
+import { ENDPOINTS, adminBrokerById, adminOmsEndpointByName, adminUserById } from '../config/api';
 import { httpClient } from './httpClient';
 import type {
   AdminBroker,
+  AdminOmsEndpoint,
   AdminUser,
   BrokerCreateInput,
   BrokerUpdateInput,
+  OmsEndpointCreateInput,
+  OmsEndpointUpdateInput,
   UserCreateInput,
   UserUpdateInput,
 } from '../types/auth';
@@ -45,4 +48,23 @@ export async function updateUser(id: number, payload: UserUpdateInput): Promise<
 
 export async function deleteUser(id: number): Promise<void> {
   await httpClient.delete(adminUserById(id));
+}
+
+export async function listOmsEndpoints(): Promise<AdminOmsEndpoint[]> {
+  const res = await httpClient.get<AdminOmsEndpoint[]>(ENDPOINTS.adminOmsEndpoints);
+  return res.data;
+}
+
+export async function createOmsEndpoint(payload: OmsEndpointCreateInput): Promise<AdminOmsEndpoint> {
+  const res = await httpClient.post<AdminOmsEndpoint>(ENDPOINTS.adminOmsEndpoints, payload);
+  return res.data;
+}
+
+export async function updateOmsEndpoint(name: string, payload: OmsEndpointUpdateInput): Promise<AdminOmsEndpoint> {
+  const res = await httpClient.put<AdminOmsEndpoint>(adminOmsEndpointByName(name), payload);
+  return res.data;
+}
+
+export async function deleteOmsEndpoint(name: string): Promise<void> {
+  await httpClient.delete(adminOmsEndpointByName(name));
 }
