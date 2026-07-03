@@ -80,14 +80,14 @@ def run(from_date: date, to_date: date, stock_exchange: str) -> None:
             logger.info("=== %s ===", day_str)
 
             tokens = get_tokens_for_active_endpoints(db)
-            market_creds = oms_endpoint_service.get_endpoint_credentials(db, "market")
-            if market_creds is None:
-                raise NoTokenError("no 'market' OMS endpoint configured")
-            market_token = get_or_refresh_token(db, market_creds)
-
             endpoints = oms_endpoint_service.get_active_endpoints(db)
+            market_endpoint = endpoints.get("market")
+            if market_endpoint is None:
+                raise NoTokenError("no 'market' OMS endpoint configured")
+            market_token = get_or_refresh_token(db, market_endpoint.credentials)
+
             broker_results = fetch_service.fetch_brokers(db, endpoints, tokens, day_str, day_str)
-            market_data = fetch_service.fetch_market(endpoints["primary"], market_token, stock_exchange)
+            market_data = fetch_service.fetch_market(market_endpoint, market_token, stock_exchange)
             if not broker_results:
                 logger.warning("%s: no pipeline-enabled brokers found in `brokers` table", day_str)
 

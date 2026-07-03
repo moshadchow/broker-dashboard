@@ -2,7 +2,6 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.config_data.brokers import BROKERS
 from app.models.broker import Broker
 from app.models.oms_endpoint import OmsEndpoint
 from app.models.user import User
@@ -88,46 +87,3 @@ def delete_broker(db: Session, broker_id: str) -> None:
 
     db.delete(broker)
     db.commit()
-
-
-def seed_brokers(db: Session) -> None:
-    existing = list(db.scalars(select(Broker)).all())
-
-    if not existing:
-        for index, entry in enumerate(BROKERS):
-            label = entry["label"]
-            db.add(
-                Broker(
-                    broker_id=label,
-                    broker_label=label,
-                    external_api_id=entry["id"],
-                    order_index=index,
-                    api_endpoint=entry.get("endpoint", "primary"),
-                )
-            )
-        db.commit()
-        return
-
-    # Existing install: backfill external_api_id/order_index/api_endpoint for
-    # rows that predate these columns, matched by broker_label. Idempotent.
-    by_label = {entry["label"]: entry for entry in BROKERS}
-    order_by_label = {entry["label"]: index for index, entry in enumerate(BROKERS)}
-
-    changed = False
-    for broker in existing:
-        config_entry = by_label.get(broker.broker_label)
-        if config_entry is None:
-            continue
-
-        if broker.external_api_id is None:
-            broker.external_api_id = config_entry["id"]
-            changed = True
-        if broker.order_index is None:
-            broker.order_index = order_by_label[broker.broker_label]
-            changed = True
-        if broker.api_endpoint is None:
-            broker.api_endpoint = config_entry.get("endpoint", "primary")
-            changed = True
-
-    if changed:
-        db.commit()
