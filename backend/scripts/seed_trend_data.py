@@ -4,7 +4,7 @@ Usage (from backend/, with venv activated):
     python -m scripts.seed_trend_data
 """
 import random
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 
 from sqlalchemy import func
 from sqlalchemy.dialects.mysql import insert as mysql_insert
@@ -14,7 +14,7 @@ from app.config_data.brokers import BROKERS
 from app.db.session import SessionLocal
 from app.models.broker_snapshot import BrokerSnapshot
 from app.models.market_snapshot import MarketSnapshot
-from app.utils.time import today_local
+from app.utils.time import app_tz, today_local
 
 DAYS_BACK = 7
 
@@ -46,21 +46,24 @@ def random_broker_row(broker: dict, day) -> dict:
 def random_market_row(stock_exchange: str, day) -> dict:
     trade = random.randint(50_000, 200_000)
     value = round(random.uniform(500_000, 2_000_000), 4)
-    gainer = random.randint(0, 200)
-    loser = random.randint(0, 200)
-    unchanged = random.randint(0, 50)
+    timestamp = int(datetime.combine(day, time.min, tzinfo=app_tz()).timestamp())
 
     return dict(
         stock_exchange=stock_exchange,
         snapshot_date=day,
-        market_date=day.isoformat(),
-        low=round(random.uniform(100, 1000), 4),
-        volume=random.randint(1_000_000, 10_000_000),
-        trade=trade,
-        value=value,
-        gainer=gainer,
-        loser=loser,
-        unchanged=unchanged,
+        times=timestamp,
+        closes=round(random.uniform(5000, 5500), 5),
+        ltps=round(random.uniform(5000, 5500), 5),
+        ycps=round(random.uniform(5000, 5500), 5),
+        opens=round(random.uniform(5000, 5500), 5),
+        highs=round(random.uniform(5500, 5700), 5),
+        lows=round(random.uniform(4800, 5000), 5),
+        settlement_prices=0,
+        volumes=random.randint(1_000_000, 10_000_000),
+        trades=trade,
+        values=value,
+        changes=round(random.uniform(-50, 50), 5),
+        change_percentages=round(random.uniform(-2, 2), 5),
     )
 
 
@@ -88,7 +91,7 @@ def main() -> None:
             update_cols = {
                 k: getattr(stmt.inserted, k)
                 for k in market_values
-                if k not in ("stock_exchange", "snapshot_date")
+                if k not in ("stock_exchange", "snapshot_date", "times")
             }
             update_cols["fetched_at"] = func.now()
             stmt = stmt.on_duplicate_key_update(**update_cols)

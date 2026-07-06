@@ -64,14 +64,20 @@ export interface AggregateRow extends BrokerData {
 }
 
 export interface MarketRow {
-  date:      string;
-  low:       number;
-  volume:    number;
-  trade:     number;
-  value:     number;
-  gainer:    number;
-  loser:     number;
-  unchanged: number;
+  snapshotDate:       string;
+  times:              number;
+  closes:             number;
+  ltps:               number;
+  ycps:               number;
+  opens:              number;
+  highs:              number;
+  lows:               number;
+  settlementPrices:   number;
+  volumes:            number;
+  trades:             number;
+  values:             number;
+  changes:            number;
+  changePercentages:  number;
 }
 
 export interface DashboardParams {

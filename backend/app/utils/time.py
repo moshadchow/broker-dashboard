@@ -1,5 +1,5 @@
 from datetime import date, datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.config import settings
 
@@ -8,8 +8,13 @@ def now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def app_tz() -> ZoneInfo:
-    return ZoneInfo(settings.app_timezone)
+def app_tz():
+    try:
+        return ZoneInfo(settings.app_timezone)
+    except ZoneInfoNotFoundError:
+        if settings.app_timezone == "Asia/Dhaka":
+            return timezone(timedelta(hours=6), name="Asia/Dhaka")
+        raise
 
 
 def today_local() -> date:

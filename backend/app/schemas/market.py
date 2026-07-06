@@ -4,14 +4,20 @@ from pydantic import BaseModel
 
 
 class MarketRowOut(BaseModel):
-    date: str
-    low: float
-    volume: int
-    trade: int
-    value: float
-    gainer: int
-    loser: int
-    unchanged: int
+    snapshotDate: str
+    times: int
+    closes: float
+    ltps: float
+    ycps: float
+    opens: float
+    highs: float
+    lows: float
+    settlementPrices: float
+    volumes: int
+    trades: int
+    values: float
+    changes: float
+    changePercentages: float
 
 
 class MarketDataResponse(BaseModel):

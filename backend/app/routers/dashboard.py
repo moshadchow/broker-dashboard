@@ -16,11 +16,11 @@ router = APIRouter(prefix="/api/dashboard")
 
 # metric name -> (BrokerSnapshot field, MarketSnapshot field)
 METRIC_FIELDS: dict[str, tuple[str, str]] = {
-    "trade": ("total_trade", "trade"),
-    "value": ("total_value", "value"),
+    "trade": ("total_trade", "trades"),
+    "value": ("total_value", "values"),
 }
 
-# MarketSnapshot.value is reported by the external API in millions, while
+# MarketSnapshot.values is reported by the external API in millions, while
 # BrokerSnapshot.total_value is in actual currency units — normalize to match.
 MARKET_VALUE_MULTIPLIER = 1_000_000
 
@@ -97,12 +97,12 @@ def get_trend(
             MarketSnapshot.stock_exchange == stockExchange,
             MarketSnapshot.snapshot_date >= fromDate,
             MarketSnapshot.snapshot_date <= toDate,
-        )
+        ).order_by(MarketSnapshot.snapshot_date.asc(), MarketSnapshot.times.asc(), MarketSnapshot.fetched_at.asc())
     ).all()
     market_by_date: dict[date, dict[str, float]] = {
         row.snapshot_date: {
-            "trade": float(row.trade),
-            "value": float(row.value) * MARKET_VALUE_MULTIPLIER,
+            "trade": float(row.trades),
+            "value": float(row.values) * MARKET_VALUE_MULTIPLIER,
         }
         for row in market_rows
     }

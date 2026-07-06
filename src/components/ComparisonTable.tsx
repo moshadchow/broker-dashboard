@@ -93,10 +93,10 @@ export default function ComparisonTable({ brokerRows, aggregateRow, marketRow }:
           <tr className="bg-gray-50 border-t-2 border-gray-300">
             <TD className="font-bold text-gray-600">Market</TD>
             <TD>—</TD>
-            <TD>{marketRow ? fmt(marketRow.trade) : '—'}</TD>
+            <TD>{marketRow ? fmt(marketRow.trades) : '—'}</TD>
             <TD>—</TD>
             <TD>—</TD>
-            <TD>{marketRow ? fmt(marketRow.value * MARKET_VALUE_UNIT_MULTIPLIER) : '—'}</TD>
+            <TD>{marketRow ? fmt(marketRow.values * MARKET_VALUE_UNIT_MULTIPLIER) : '—'}</TD>
             <TD>—</TD>
             <TD>—</TD>
             <TD><ShareBadge pct={100} isMarket noData={noMarket} /></TD>

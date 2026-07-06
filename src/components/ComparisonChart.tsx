@@ -34,11 +34,11 @@ function CustomTooltip({
   if (!active || !payload?.length) return null;
   const tradeVal = payload.find(p => p.name === 'Total Trade')?.value ?? 0;
   const valueVal = payload.find(p => p.name === 'Total Value')?.value ?? 0;
-  const tradePct = marketRow && marketRow.trade > 0
-    ? ((tradeVal / marketRow.trade) * 100).toFixed(2) + '%'
+  const tradePct = marketRow && marketRow.trades > 0
+    ? ((tradeVal / marketRow.trades) * 100).toFixed(2) + '%'
     : 'N/A';
-  const valuePct = marketRow && marketRow.value > 0
-    ? ((valueVal / (marketRow.value * MARKET_VALUE_UNIT_MULTIPLIER)) * 100).toFixed(2) + '%'
+  const valuePct = marketRow && marketRow.values > 0
+    ? ((valueVal / (marketRow.values * MARKET_VALUE_UNIT_MULTIPLIER)) * 100).toFixed(2) + '%'
     : 'N/A';
 
   return (
@@ -79,13 +79,13 @@ export default function ComparisonChart({ brokerRows, aggregateRow, marketRow }:
           {marketRow && (
             <>
               <ReferenceLine
-                y={marketRow.trade}
+                y={marketRow.trades}
                 stroke="#3b82f6"
                 strokeDasharray="5 5"
                 label={{ value: 'Market Trade', position: 'insideTopRight', fontSize: 11, fill: '#3b82f6' }}
               />
               <ReferenceLine
-                y={marketRow.value * MARKET_VALUE_UNIT_MULTIPLIER}
+                y={marketRow.values * MARKET_VALUE_UNIT_MULTIPLIER}
                 stroke="#10b981"
                 strokeDasharray="5 5"
                 label={{ value: 'Market Value', position: 'insideTopLeft', fontSize: 11, fill: '#10b981' }}
