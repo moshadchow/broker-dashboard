@@ -35,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.config import CredentialSet, settings  # noqa: E402
 from app.db.session import SessionLocal  # noqa: E402
+from app.models.token_store import TokenStore  # noqa: E402
 from app.services import auth_service, broker_service, fetch_service, oms_endpoint_service, store_service  # noqa: E402
 from app.services.auth_service import NoTokenError  # noqa: E402
 from app.services.external_api import ExternalAuthError, MfaRequiredError  # noqa: E402
@@ -48,6 +49,20 @@ def get_or_refresh_token(db, credentials: CredentialSet) -> str:
         return auth_service.get_valid_access_token(db, credentials)
     except (NoTokenError, ExternalAuthError):
         return auth_service.auth(db, credentials)
+
+
+def fetch_market_with_retry(db, endpoint, credentials: CredentialSet, stock_exchange: str, target_date: date):
+    token = get_or_refresh_token(db, credentials)
+    try:
+        return fetch_service.fetch_market(endpoint, token, stock_exchange, target_date)
+    except ExternalAuthError as exc:
+        logger.warning("market token rejected (%s); refreshing and retrying once", exc)
+        stored_token = db.get(TokenStore, credentials.name)
+        try:
+            token = auth_service.do_refresh(db, stored_token, credentials) if stored_token else auth_service.auth(db, credentials)
+        except ExternalAuthError:
+            token = auth_service.auth(db, credentials)
+        return fetch_service.fetch_market(endpoint, token, stock_exchange, target_date)
 
 
 def get_tokens_for_active_endpoints(db) -> dict[str, str]:
@@ -84,10 +99,9 @@ def run(from_date: date, to_date: date, stock_exchange: str) -> None:
             market_endpoint = endpoints.get("market")
             if market_endpoint is None:
                 raise NoTokenError("no 'market' OMS endpoint configured")
-            market_token = get_or_refresh_token(db, market_endpoint.credentials)
 
             broker_results = fetch_service.fetch_brokers(db, endpoints, tokens, day_str, day_str)
-            market_data = fetch_service.fetch_market(market_endpoint, market_token, stock_exchange)
+            market_data = fetch_market_with_retry(db, market_endpoint, market_endpoint.credentials, stock_exchange, current)
             if not broker_results:
                 logger.warning("%s: no pipeline-enabled brokers found in `brokers` table", day_str)
 

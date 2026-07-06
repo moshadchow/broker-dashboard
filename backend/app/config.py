@@ -23,7 +23,7 @@ class OmsEndpoint:
 class Settings(BaseSettings):
     app_env: str = "uat"
 
-    scheduled_time: str = "03:00"
+    scheduled_time: str = "15:00"
     app_timezone: str = "Asia/Dhaka"
 
     default_stock_exchange: str = "DSE"

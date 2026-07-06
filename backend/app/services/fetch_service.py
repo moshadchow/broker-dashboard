@@ -1,5 +1,6 @@
 import logging
 from collections import defaultdict
+from datetime import date
 
 from sqlalchemy.orm import Session
 
@@ -97,10 +98,17 @@ def fetch_brokers_subset(
     return _fetch_broker_list(brokers, endpoints, tokens, from_date, to_date)
 
 
-def fetch_market(endpoint: OmsEndpoint, token: str, stock_exchange: str) -> dict | None:
-    """Fetch market trade info from the given endpoint. Returns None on failure."""
+def fetch_market(
+    endpoint: OmsEndpoint,
+    token: str,
+    stock_exchange: str,
+    target_date: date | None = None,
+) -> list[dict] | None:
+    """Fetch market share price history from the given endpoint. Returns None on failure."""
     try:
-        return external_api.fetch_market_trade_info(endpoint.base_url, token, stock_exchange)
+        return external_api.fetch_market_trade_info(endpoint.base_url, token, stock_exchange, target_date)
+    except external_api.ExternalAuthError:
+        raise
     except Exception:
         logger.warning("market fetch failed for %s", stock_exchange, exc_info=True)
         return None

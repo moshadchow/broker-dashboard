@@ -72,11 +72,11 @@ export function useDashboardData(params: DashboardParams): DashboardData {
         const d = marketResp.market;
         marketRow = { ...d };
         // Compute share pcts
-        if (d.trade > 0) {
-          brokerRows.forEach(r => { r.tradeSharePct = r.totalTrade / d.trade * 100; });
-          aggregateRow.tradeSharePct = aggregateRow.totalTrade / d.trade * 100;
+        if (d.trades > 0) {
+          brokerRows.forEach(r => { r.tradeSharePct = r.totalTrade / d.trades * 100; });
+          aggregateRow.tradeSharePct = aggregateRow.totalTrade / d.trades * 100;
         }
-        const marketValue = d.value * MARKET_VALUE_UNIT_MULTIPLIER;
+        const marketValue = d.values * MARKET_VALUE_UNIT_MULTIPLIER;
         if (marketValue > 0) {
           brokerRows.forEach(r => { r.valueSharePct = r.totalValue / marketValue * 100; });
           aggregateRow.valueSharePct = aggregateRow.totalValue / marketValue * 100;

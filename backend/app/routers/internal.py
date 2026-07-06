@@ -121,7 +121,7 @@ def get_market_data(
             MarketSnapshot.stock_exchange == settings.default_stock_exchange,
             MarketSnapshot.snapshot_date == toDate,
         )
-        .order_by(MarketSnapshot.fetched_at.desc())
+        .order_by(MarketSnapshot.times.desc(), MarketSnapshot.fetched_at.desc())
         .limit(1)
     )
 
@@ -138,14 +138,20 @@ def get_market_data(
         stockExchange=snapshot.stock_exchange,
         fetchedAt=_aware_utc(snapshot.fetched_at),
         market=MarketRowOut(
-            date=snapshot.market_date,
-            low=float(snapshot.low),
-            volume=snapshot.volume,
-            trade=snapshot.trade,
-            value=float(snapshot.value),
-            gainer=snapshot.gainer,
-            loser=snapshot.loser,
-            unchanged=snapshot.unchanged,
+            snapshotDate=snapshot.snapshot_date.isoformat(),
+            times=snapshot.times,
+            closes=float(snapshot.closes),
+            ltps=float(snapshot.ltps),
+            ycps=float(snapshot.ycps),
+            opens=float(snapshot.opens),
+            highs=float(snapshot.highs),
+            lows=float(snapshot.lows),
+            settlementPrices=float(snapshot.settlement_prices),
+            volumes=snapshot.volumes,
+            trades=snapshot.trades,
+            values=float(snapshot.values),
+            changes=float(snapshot.changes),
+            changePercentages=float(snapshot.change_percentages),
         ),
     )
 

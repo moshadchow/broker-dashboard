@@ -104,3 +104,77 @@ def ensure_oms_endpoint_fk(engine: Engine) -> None:
             )
         )
         logger.info("Added FK brokers.api_endpoint -> oms_endpoints.name")
+
+
+def ensure_market_snapshot_share_price_history_schema(engine: Engine) -> None:
+    """Migrate market_snapshots to the share-price-history row structure.
+
+    Existing deployments may still have the old single-row daily market schema.
+    New inserts only provide the share-price-history columns, so old required
+    columns must be nullable and the old per-day unique key must be removed.
+    """
+    inspector = inspect(engine)
+    if "market_snapshots" not in inspector.get_table_names():
+        return
+
+    existing_cols = {col["name"] for col in inspector.get_columns("market_snapshots")}
+    new_columns = {
+        "times": "BIGINT NOT NULL DEFAULT 0",
+        "closes": "DECIMAL(20, 5) NOT NULL DEFAULT 0",
+        "ltps": "DECIMAL(20, 5) NOT NULL DEFAULT 0",
+        "ycps": "DECIMAL(20, 5) NOT NULL DEFAULT 0",
+        "opens": "DECIMAL(20, 5) NOT NULL DEFAULT 0",
+        "highs": "DECIMAL(20, 5) NOT NULL DEFAULT 0",
+        "lows": "DECIMAL(20, 5) NOT NULL DEFAULT 0",
+        "settlement_prices": "DECIMAL(20, 5) NOT NULL DEFAULT 0",
+        "volumes": "BIGINT NOT NULL DEFAULT 0",
+        "trades": "BIGINT NOT NULL DEFAULT 0",
+        "values": "DECIMAL(20, 5) NOT NULL DEFAULT 0",
+        "changes": "DECIMAL(20, 5) NOT NULL DEFAULT 0",
+        "change_percentages": "DECIMAL(20, 5) NOT NULL DEFAULT 0",
+    }
+    old_columns_to_relax = {
+        "market_date": "VARCHAR(32) NULL",
+        "low": "DECIMAL(20, 4) NULL",
+        "volume": "BIGINT NULL",
+        "trade": "BIGINT NULL",
+        "value": "DECIMAL(20, 4) NULL",
+        "gainer": "INT NULL",
+        "loser": "INT NULL",
+        "unchanged": "INT NULL",
+    }
+
+    with engine.begin() as conn:
+        for column_name, definition in new_columns.items():
+            if column_name not in existing_cols:
+                conn.execute(text(f"ALTER TABLE market_snapshots ADD COLUMN `{column_name}` {definition}"))
+                logger.info("Added column market_snapshots.%s", column_name)
+
+        for column_name, definition in old_columns_to_relax.items():
+            if column_name in existing_cols:
+                conn.execute(text(f"ALTER TABLE market_snapshots MODIFY COLUMN `{column_name}` {definition}"))
+
+        unique_constraints = {constraint["name"] for constraint in inspector.get_unique_constraints("market_snapshots")}
+        if "uq_exchange_day" in unique_constraints:
+            conn.execute(text("ALTER TABLE market_snapshots DROP INDEX uq_exchange_day"))
+            logger.info("Dropped unique index market_snapshots.uq_exchange_day")
+
+        indexes = {index["name"] for index in inspector.get_indexes("market_snapshots")}
+        if "idx_exchange_snapshot_date" not in indexes:
+            conn.execute(
+                text(
+                    "CREATE INDEX idx_exchange_snapshot_date "
+                    "ON market_snapshots (`stock_exchange`, `snapshot_date`)"
+                )
+            )
+            logger.info("Added index market_snapshots.idx_exchange_snapshot_date")
+
+        unique_constraints = {constraint["name"] for constraint in inspect(conn).get_unique_constraints("market_snapshots")}
+        if "uq_exchange_day_time" not in unique_constraints:
+            conn.execute(
+                text(
+                    "ALTER TABLE market_snapshots ADD CONSTRAINT uq_exchange_day_time "
+                    "UNIQUE (`stock_exchange`, `snapshot_date`, `times`)"
+                )
+            )
+            logger.info("Added unique index market_snapshots.uq_exchange_day_time")

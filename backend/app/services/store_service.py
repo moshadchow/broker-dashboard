@@ -36,28 +36,27 @@ def store_broker_results(db: Session, broker_results: list[dict], from_date: str
     db.commit()
 
 
-def store_market_result(db: Session, market_data: dict | None, stock_exchange: str, snapshot_date: date) -> None:
-    if market_data is None:
+def store_market_result(db: Session, market_data: list[dict] | None, stock_exchange: str, snapshot_date: date) -> None:
+    if not market_data:
         return
 
-    values = dict(
-        stock_exchange=stock_exchange,
-        snapshot_date=snapshot_date,
-        market_date=market_data["date"],
-        low=market_data["low"],
-        volume=market_data["volume"],
-        trade=market_data["trade"],
-        value=market_data["value"],
-        gainer=market_data["gainer"],
-        loser=market_data["loser"],
-        unchanged=market_data["unchanged"],
-    )
-    stmt = mysql_insert(MarketSnapshot).values(**values)
-    update_cols = {k: getattr(stmt.inserted, k) for k in values if k not in ("stock_exchange", "snapshot_date")}
-    update_cols["fetched_at"] = func.now()
-    stmt = stmt.on_duplicate_key_update(**update_cols)
-    db.execute(stmt)
-    db.commit()
+    try:
+        for row in market_data:
+            values = dict(row)
+            values["stock_exchange"] = stock_exchange
+            stmt = mysql_insert(MarketSnapshot).values(**values)
+            update_cols = {
+                k: getattr(stmt.inserted, k)
+                for k in values
+                if k not in ("stock_exchange", "snapshot_date", "times")
+            }
+            update_cols["fetched_at"] = func.now()
+            stmt = stmt.on_duplicate_key_update(**update_cols)
+            db.execute(stmt)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
 
 def log_pipeline_run(

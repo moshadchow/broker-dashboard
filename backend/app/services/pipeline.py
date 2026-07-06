@@ -20,6 +20,20 @@ def _get_token(db, credentials):
         return auth_service.auth(db, credentials)
 
 
+def _fetch_market_with_retry(db, endpoint, credentials, stock_exchange, target_date):
+    token = _get_token(db, credentials)
+    try:
+        return fetch_service.fetch_market(endpoint, token, stock_exchange, target_date)
+    except ExternalAuthError as exc:
+        logger.warning("market token rejected (%s); refreshing and retrying once", exc)
+        stored_token = db.get(TokenStore, credentials.name)
+        try:
+            token = auth_service.do_refresh(db, stored_token, credentials) if stored_token else auth_service.auth(db, credentials)
+        except ExternalAuthError:
+            token = auth_service.auth(db, credentials)
+        return fetch_service.fetch_market(endpoint, token, stock_exchange, target_date)
+
+
 def _active_endpoint_names(db) -> set[str]:
     """Endpoint names with at least one pipeline-enabled broker routed to them."""
     return {
@@ -117,13 +131,17 @@ def run_pipeline() -> None:
         market_creds = oms_endpoint_service.get_endpoint_credentials(db, "market")
         if market_creds is None:
             raise auth_service.NoTokenError("no 'market' OMS endpoint configured")
-        market_token = _get_token(db, market_creds)
+        market_endpoint = endpoints.get("market") or endpoints.get("primary")
+        if market_endpoint is None:
+            raise auth_service.NoTokenError("no 'market' or 'primary' OMS endpoint configured")
 
         today = today_local()
         today_iso = today.isoformat()
 
         broker_results = fetch_service.fetch_brokers(db, endpoints, tokens, today_iso, today_iso)
-        market_data = fetch_service.fetch_market(endpoints["primary"], market_token, settings.default_stock_exchange)
+        market_data = _fetch_market_with_retry(
+            db, market_endpoint, market_creds, settings.default_stock_exchange, today
+        )
 
         # If every broker on a given endpoint failed, that endpoint's token may
         # have expired mid-cycle - refresh and retry just that endpoint once.
