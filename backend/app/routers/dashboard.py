@@ -20,11 +20,6 @@ METRIC_FIELDS: dict[str, tuple[str, str]] = {
     "value": ("total_value", "values"),
 }
 
-# MarketSnapshot.values is reported by the external API in millions, while
-# BrokerSnapshot.total_value is in actual currency units — normalize to match.
-MARKET_VALUE_MULTIPLIER = 1_000_000
-
-
 def _date_range(from_date: date, to_date: date) -> list[date]:
     days = (to_date - from_date).days
     return [from_date + timedelta(days=i) for i in range(days + 1)]
@@ -102,7 +97,7 @@ def get_trend(
     market_by_date: dict[date, dict[str, float]] = {
         row.snapshot_date: {
             "trade": float(row.trades),
-            "value": float(row.values) * MARKET_VALUE_MULTIPLIER,
+            "value": float(row.values),
         }
         for row in market_rows
     }

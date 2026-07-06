@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import func
+from sqlalchemy import func, select, tuple_
 from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.orm import Session
 
@@ -36,12 +36,43 @@ def store_broker_results(db: Session, broker_results: list[dict], from_date: str
     db.commit()
 
 
-def store_market_result(db: Session, market_data: list[dict] | None, stock_exchange: str, snapshot_date: date) -> None:
+def store_market_result(
+    db: Session,
+    market_data: list[dict] | None,
+    stock_exchange: str,
+    snapshot_date: date,
+    skip_existing: bool = False,
+) -> dict[str, int]:
+    stats = {"fetched": len(market_data or []), "inserted": 0, "duplicates": 0}
     if not market_data:
-        return
+        return stats
 
     try:
-        for row in market_data:
+        rows_to_store = market_data
+        keys = [(stock_exchange, row["snapshot_date"], row["times"]) for row in market_data]
+
+        if keys:
+            existing_keys = {
+                (existing.stock_exchange, existing.snapshot_date, existing.times)
+                for existing in db.execute(
+                    select(MarketSnapshot.stock_exchange, MarketSnapshot.snapshot_date, MarketSnapshot.times).where(
+                        tuple_(
+                            MarketSnapshot.stock_exchange,
+                            MarketSnapshot.snapshot_date,
+                            MarketSnapshot.times,
+                        ).in_(keys)
+                    )
+                )
+            }
+            stats["duplicates"] = len(existing_keys)
+            if skip_existing:
+                rows_to_store = [
+                    row
+                    for row in market_data
+                    if (stock_exchange, row["snapshot_date"], row["times"]) not in existing_keys
+                ]
+
+        for row in rows_to_store:
             values = dict(row)
             values["stock_exchange"] = stock_exchange
             stmt = mysql_insert(MarketSnapshot).values(**values)
@@ -53,7 +84,9 @@ def store_market_result(db: Session, market_data: list[dict] | None, stock_excha
             update_cols["fetched_at"] = func.now()
             stmt = stmt.on_duplicate_key_update(**update_cols)
             db.execute(stmt)
+            stats["inserted"] += 1
         db.commit()
+        return stats
     except Exception:
         db.rollback()
         raise

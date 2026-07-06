@@ -1,4 +1,4 @@
-import { MARKET_SHARE_THRESHOLD, MARKET_VALUE_UNIT_MULTIPLIER } from '../config/api';
+import { MARKET_SHARE_THRESHOLD } from '../config/api';
 import type { BrokerRow, AggregateRow, MarketRow } from '../types';
 
 interface Props {
@@ -96,7 +96,7 @@ export default function ComparisonTable({ brokerRows, aggregateRow, marketRow }:
             <TD>{marketRow ? fmt(marketRow.trades) : '—'}</TD>
             <TD>—</TD>
             <TD>—</TD>
-            <TD>{marketRow ? fmt(marketRow.values * MARKET_VALUE_UNIT_MULTIPLIER) : '—'}</TD>
+            <TD>{marketRow ? fmt(marketRow.values) : '—'}</TD>
             <TD>—</TD>
             <TD>—</TD>
             <TD><ShareBadge pct={100} isMarket noData={noMarket} /></TD>

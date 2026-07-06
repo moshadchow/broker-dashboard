@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { BROKERS } from '../config/brokers';
-import { MARKET_VALUE_UNIT_MULTIPLIER } from '../config/api';
 import { fetchInternalBrokerData, fetchInternalMarketData } from '../services/apiService';
 import type {
   DashboardParams,
@@ -76,10 +75,10 @@ export function useDashboardData(params: DashboardParams): DashboardData {
           brokerRows.forEach(r => { r.tradeSharePct = r.totalTrade / d.trades * 100; });
           aggregateRow.tradeSharePct = aggregateRow.totalTrade / d.trades * 100;
         }
-        const marketValue = d.values * MARKET_VALUE_UNIT_MULTIPLIER;
+        const marketValue = Number(d.values);
         if (marketValue > 0) {
-          brokerRows.forEach(r => { r.valueSharePct = r.totalValue / marketValue * 100; });
-          aggregateRow.valueSharePct = aggregateRow.totalValue / marketValue * 100;
+          brokerRows.forEach(r => { r.valueSharePct = (Number(r.totalValue) / marketValue) * 100; });
+          aggregateRow.valueSharePct = (Number(aggregateRow.totalValue) / marketValue) * 100;
         }
       } else {
         error = 'Market data unavailable — share % disabled.';

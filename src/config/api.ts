@@ -27,7 +27,3 @@ export const adminOmsEndpointByName = (name: string) => `/admin/oms-endpoints/${
 
 // Share % cells: green if >= threshold, amber if below
 export const MARKET_SHARE_THRESHOLD = 5;
-
-// marketRow.values is reported in millions (BDT) while broker totalValue is
-// in raw taka — multiply market value by this to compare them directly.
-export const MARKET_VALUE_UNIT_MULTIPLIER = 1_000_000;

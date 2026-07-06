@@ -3,7 +3,6 @@ import {
   Tooltip, Legend, ReferenceLine, ResponsiveContainer,
 } from 'recharts';
 import type { BrokerRow, AggregateRow, MarketRow } from '../types';
-import { MARKET_VALUE_UNIT_MULTIPLIER } from '../config/api';
 
 interface Props {
   brokerRows:   BrokerRow[];
@@ -38,7 +37,7 @@ function CustomTooltip({
     ? ((tradeVal / marketRow.trades) * 100).toFixed(2) + '%'
     : 'N/A';
   const valuePct = marketRow && marketRow.values > 0
-    ? ((valueVal / (marketRow.values * MARKET_VALUE_UNIT_MULTIPLIER)) * 100).toFixed(2) + '%'
+    ? ((Number(valueVal) / Number(marketRow.values)) * 100).toFixed(2) + '%'
     : 'N/A';
 
   return (
@@ -85,7 +84,7 @@ export default function ComparisonChart({ brokerRows, aggregateRow, marketRow }:
                 label={{ value: 'Market Trade', position: 'insideTopRight', fontSize: 11, fill: '#3b82f6' }}
               />
               <ReferenceLine
-                y={marketRow.values * MARKET_VALUE_UNIT_MULTIPLIER}
+                y={marketRow.values}
                 stroke="#10b981"
                 strokeDasharray="5 5"
                 label={{ value: 'Market Value', position: 'insideTopLeft', fontSize: 11, fill: '#10b981' }}
