@@ -115,6 +115,7 @@ export default function Dashboard() {
               brokerRows={brokerRows}
               aggregateRow={aggregateRow}
               marketRow={marketRow}
+              stockExchange={activeParams?.stockExchange ?? params.stockExchange}
             />
             {trend && <TrendChart trend={trend} />}
           </>

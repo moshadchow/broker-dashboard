@@ -17,8 +17,9 @@ function fmtTick(v: number): string {
 }
 
 function fmtDate(d: string): string {
-  const [, month, day] = d.split('-');
-  return `${month}/${day}`;
+  const [year, month, day] = d.split('-');
+  if (!year || !month || !day) return d;
+  return `${day}/${month}/${year}`;
 }
 
 function fmtPct(v: number): string {
@@ -99,10 +100,11 @@ function CustomTooltip({
   if (!active || !payload?.length) return null;
 
   const fullDate = payload[0]?.payload.fullDate ?? label;
+  const displayDate = fullDate ? fmtDate(String(fullDate)) : label;
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-4 py-3 text-sm">
-      <p className="font-bold text-gray-800 mb-2">{fullDate}</p>
+      <p className="font-bold text-gray-800 mb-2">{displayDate}</p>
       {payload.map(p => {
         const isPercent = PCT_DATA_KEYS.has(p.dataKey);
         const pctFields = PCT_FIELDS[p.dataKey];
@@ -152,7 +154,12 @@ function TrendLineChart({
           syncId="trade-value-trend"
           margin={{ top: 10, right: 34, left: 10, bottom: showBrush ? 18 : 0 }}
         >
-          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+          <CartesianGrid
+            strokeDasharray="3 3"
+            stroke="#f0f0f0"
+            horizontal
+            vertical
+          />
           <XAxis dataKey="date" tick={{ fontSize: 12 }} />
           <YAxis yAxisId="actual" tickFormatter={fmtTick} tick={{ fontSize: 11 }} />
           <YAxis

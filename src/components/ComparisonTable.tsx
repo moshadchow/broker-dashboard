@@ -5,6 +5,7 @@ interface Props {
   brokerRows:   BrokerRow[];
   aggregateRow: AggregateRow;
   marketRow:    MarketRow | null;
+  stockExchange: string;
 }
 
 function ShareBadge({ pct, isMarket, noData }: { pct: number; isMarket?: boolean; noData?: boolean }) {
@@ -28,8 +29,9 @@ const TD = ({ children, className = '' }: { children: React.ReactNode; className
   <td className={`px-4 py-3 text-sm text-gray-700 whitespace-nowrap ${className}`}>{children}</td>
 );
 
-export default function ComparisonTable({ brokerRows, aggregateRow, marketRow }: Props) {
+export default function ComparisonTable({ brokerRows, aggregateRow, marketRow, stockExchange }: Props) {
   const noMarket = marketRow === null;
+  const marketLabel = stockExchange.trim() || 'DSE';
 
   return (
     <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
@@ -77,7 +79,7 @@ export default function ComparisonTable({ brokerRows, aggregateRow, marketRow }:
 
           {/* Aggregate row */}
           <tr className="bg-blue-50 font-semibold">
-            <TD className="font-bold text-blue-800">Σ Aggregate</TD>
+            <TD className="font-bold text-blue-800">Σ XFL</TD>
             <TD>{fmt(aggregateRow.totalExecutionReport)}</TD>
             <TD>{fmt(aggregateRow.totalTrade)}</TD>
             <TD>{fmt(aggregateRow.buyTrade)}</TD>
@@ -91,7 +93,7 @@ export default function ComparisonTable({ brokerRows, aggregateRow, marketRow }:
 
           {/* Market row */}
           <tr className="bg-gray-50 border-t-2 border-gray-300">
-            <TD className="font-bold text-gray-600">Market</TD>
+            <TD className="font-bold text-gray-600">{marketLabel}</TD>
             <TD>—</TD>
             <TD>{marketRow ? fmt(marketRow.trades) : '—'}</TD>
             <TD>—</TD>
