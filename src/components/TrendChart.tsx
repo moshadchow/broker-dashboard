@@ -225,7 +225,7 @@ export default function TrendChart({ trend }: Props) {
   if (data.length === 0) {
     return (
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
-        <h2 className="text-base font-semibold text-gray-700 mb-4">Trade Count &amp; Value Trend</h2>
+        <h2 className="text-base font-semibold text-gray-700 mb-4">Value Trend &amp; Trade Count</h2>
         <div className="h-[400px] flex items-center justify-center text-sm text-gray-500">
           No data available
         </div>
@@ -235,7 +235,7 @@ export default function TrendChart({ trend }: Props) {
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
-      <h2 className="text-base font-semibold text-gray-700 mb-4">Trade Count &amp; Value Trend</h2>
+      <h2 className="text-base font-semibold text-gray-700 mb-4">Value Trend &amp; Trade Count</h2>
       <div className="space-y-8">
         <TrendLineChart data={data} metric="value" showOwn={showOwn} ownLabel={ownLabel} showBrush />
         <TrendLineChart data={data} metric="trades" showOwn={showOwn} ownLabel={ownLabel} showBrush />
