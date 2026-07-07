@@ -108,6 +108,17 @@ export default function TrendChart({ trend }: Props) {
   const showOwn = trend.trades.ownBroker !== undefined;
   const ownLabel = trend.ownBrokerLabel ?? 'Own Broker';
 
+  if (data.length === 0) {
+    return (
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
+        <h2 className="text-base font-semibold text-gray-700 mb-4">Trade Count &amp; Value Trend</h2>
+        <div className="h-[400px] flex items-center justify-center text-sm text-gray-500">
+          No data available
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
       <h2 className="text-base font-semibold text-gray-700 mb-4">Trade Count &amp; Value Trend</h2>

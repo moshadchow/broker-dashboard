@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
@@ -13,16 +13,6 @@ from app.models.user import User
 from app.schemas.dashboard import TrendResponse, TrendSeries
 
 router = APIRouter(prefix="/api/dashboard")
-
-# metric name -> (BrokerSnapshot field, MarketSnapshot field)
-METRIC_FIELDS: dict[str, tuple[str, str]] = {
-    "trade": ("total_trade", "trades"),
-    "value": ("total_value", "values"),
-}
-
-def _date_range(from_date: date, to_date: date) -> list[date]:
-    days = (to_date - from_date).days
-    return [from_date + timedelta(days=i) for i in range(days + 1)]
 
 
 def _build_series(
@@ -64,6 +54,16 @@ def _build_series(
     )
 
 
+def _latest_market_by_date(rows) -> dict[date, dict[str, float]]:
+    market_by_date: dict[date, dict[str, float]] = {}
+    for row in rows:
+        market_by_date[row.snapshot_date] = {
+            "trade": float(row.trades),
+            "value": float(row.values),
+        }
+    return market_by_date
+
+
 @router.get("/trend", response_model=TrendResponse, response_model_exclude_none=True)
 def get_trend(
     fromDate: date = Query(...),
@@ -87,20 +87,23 @@ def get_trend(
             "value": float(row.total_value),
         }
 
-    market_rows = db.scalars(
-        select(MarketSnapshot).where(
+    market_rows = db.execute(
+        select(
+            MarketSnapshot.snapshot_date,
+            MarketSnapshot.trades,
+            MarketSnapshot.values,
+        ).where(
             MarketSnapshot.stock_exchange == stockExchange,
             MarketSnapshot.snapshot_date >= fromDate,
             MarketSnapshot.snapshot_date <= toDate,
-        ).order_by(MarketSnapshot.snapshot_date.asc(), MarketSnapshot.times.asc(), MarketSnapshot.fetched_at.asc())
+        ).order_by(
+            MarketSnapshot.snapshot_date.asc(),
+            MarketSnapshot.times.asc(),
+            MarketSnapshot.fetched_at.asc(),
+            MarketSnapshot.id.asc(),
+        )
     ).all()
-    market_by_date: dict[date, dict[str, float]] = {
-        row.snapshot_date: {
-            "trade": float(row.trades),
-            "value": float(row.values),
-        }
-        for row in market_rows
-    }
+    market_by_date = _latest_market_by_date(market_rows)
 
     show_own_broker = current_user.role == "user" and current_user.broker_id is not None
 
@@ -112,7 +115,7 @@ def get_trend(
             own_broker_label = own_broker.broker_label
             own_external_api_id = own_broker.external_api_id
 
-    dates = _date_range(fromDate, toDate)
+    dates = sorted(market_by_date)
 
     return TrendResponse(
         success=True,
