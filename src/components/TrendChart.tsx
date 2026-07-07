@@ -237,8 +237,8 @@ export default function TrendChart({ trend }: Props) {
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
       <h2 className="text-base font-semibold text-gray-700 mb-4">Trade Count &amp; Value Trend</h2>
       <div className="space-y-8">
-        <TrendLineChart data={data} metric="trades" showOwn={showOwn} ownLabel={ownLabel} />
         <TrendLineChart data={data} metric="value" showOwn={showOwn} ownLabel={ownLabel} showBrush />
+        <TrendLineChart data={data} metric="trades" showOwn={showOwn} ownLabel={ownLabel} showBrush />
       </div>
     </div>
   );
