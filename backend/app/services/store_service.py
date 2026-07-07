@@ -29,7 +29,7 @@ def store_broker_results(db: Session, broker_results: list[dict], from_date: str
             fetch_error=result["fetch_error"],
         )
         stmt = mysql_insert(BrokerSnapshot).values(**values)
-        update_cols = {k: getattr(stmt.inserted, k) for k in values if k not in ("broker_id", "from_date", "to_date")}
+        update_cols = {k: stmt.inserted[k] for k in values if k not in ("broker_id", "from_date", "to_date")}
         update_cols["fetched_at"] = func.now()
         stmt = stmt.on_duplicate_key_update(**update_cols)
         db.execute(stmt)
@@ -77,7 +77,7 @@ def store_market_result(
             values["stock_exchange"] = stock_exchange
             stmt = mysql_insert(MarketSnapshot).values(**values)
             update_cols = {
-                k: getattr(stmt.inserted, k)
+                k: stmt.inserted[k]
                 for k in values
                 if k not in ("stock_exchange", "snapshot_date", "times")
             }

@@ -1,8 +1,9 @@
 import unittest
 from collections import namedtuple
 from datetime import date
+from types import SimpleNamespace
 
-from app.routers.dashboard import _build_series, _latest_market_by_date
+from app.routers.dashboard import _build_series, _latest_market_by_date, _snapshot_rows_by_date
 
 
 class DashboardTrendTests(unittest.TestCase):
@@ -26,11 +27,11 @@ class DashboardTrendTests(unittest.TestCase):
     def test_empty_market_dates_return_empty_series(self) -> None:
         series = _build_series(
             dates=[],
-            by_date_broker={},
+            xfl_by_date={},
             market_by_date={},
             metric="trade",
             show_own_broker=False,
-            own_external_api_id=None,
+            own_by_date=None,
         )
 
         self.assertEqual(series.xfl, [])
@@ -38,21 +39,25 @@ class DashboardTrendTests(unittest.TestCase):
         self.assertEqual(series.pctOfMarket, [])
         self.assertIsNone(series.ownBroker)
 
+    def test_snapshot_rows_by_date_handles_values_column_name(self) -> None:
+        day = date(2025, 1, 1)
+        row = SimpleNamespace(
+            _mapping={"snapshot_date": day, "trades": 10, "values": 100.0},
+            values=lambda: ["not the column"],
+        )
+
+        self.assertEqual(_snapshot_rows_by_date([row]), {day: {"trade": 10.0, "value": 100.0}})
+
     def test_value_percentages_use_market_value_directly_for_xfl(self) -> None:
         day = date(2025, 1, 1)
 
         series = _build_series(
             dates=[day],
-            by_date_broker={
-                day: {
-                    "XFL": {"trade": 10.0, "value": 250.0},
-                    "XXX": {"trade": 5.0, "value": 750.0},
-                }
-            },
+            xfl_by_date={day: {"trade": 15.0, "value": 1_000.0}},
             market_by_date={day: {"trade": 100.0, "value": 2_000.0}},
             metric="value",
             show_own_broker=False,
-            own_external_api_id=None,
+            own_by_date=None,
         )
 
         self.assertEqual(series.xfl, [1_000.0])
@@ -64,16 +69,11 @@ class DashboardTrendTests(unittest.TestCase):
 
         series = _build_series(
             dates=[day],
-            by_date_broker={
-                day: {
-                    "XFL": {"trade": 10.0, "value": 250.0},
-                    "XXX": {"trade": 5.0, "value": 750.0},
-                }
-            },
+            xfl_by_date={day: {"trade": 15.0, "value": 1_000.0}},
             market_by_date={day: {"trade": 100.0, "value": 2_000.0}},
             metric="value",
             show_own_broker=True,
-            own_external_api_id="XXX",
+            own_by_date={day: {"trade": 5.0, "value": 750.0}},
         )
 
         self.assertEqual(series.ownBroker, [750.0])

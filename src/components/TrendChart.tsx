@@ -1,12 +1,14 @@
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer,
+  Tooltip, Legend, ResponsiveContainer, Brush,
 } from 'recharts';
 import type { TrendResponse } from '../types';
 
 interface Props {
   trend: TrendResponse;
 }
+
+type MetricKind = 'trades' | 'value';
 
 function fmtTick(v: number): string {
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
@@ -19,18 +21,23 @@ function fmtDate(d: string): string {
   return `${month}/${day}`;
 }
 
+function fmtPct(v: number): string {
+  return `${v.toFixed(0)}%`;
+}
+
 interface ChartRow {
-  date:                  string;
-  tradesOwn?:            number;
-  tradesXfl:             number;
-  tradesMarket:          number;
-  valueOwn?:             number;
-  valueXfl:              number;
-  valueMarket:           number;
-  pctOfMarketTrades:     number;
-  pctOfXflTrades?:       number;
-  pctOfMarketValue:      number;
-  pctOfXflValue?:        number;
+  date:                 string;
+  fullDate:             string;
+  tradesOwn?:           number;
+  tradesXfl:            number;
+  tradesMarket:         number;
+  valueOwn?:            number;
+  valueXfl:             number;
+  valueMarket:          number;
+  pctOfMarketTrades:    number;
+  pctOfXflTrades?:      number;
+  pctOfMarketValue:     number;
+  pctOfXflValue?:       number;
   pctXflOfMarketTrades: number;
   pctXflOfMarketValue:  number;
 }
@@ -42,17 +49,18 @@ function buildData(trend: TrendResponse): ChartRow[] {
     const valueXfl = trend.value.xfl[i];
     const valueMarket = trend.value.market[i];
     return {
-      date:              fmtDate(date),
-      tradesOwn:         trend.trades.ownBroker?.[i],
+      date:                 fmtDate(date),
+      fullDate:             date,
+      tradesOwn:            trend.trades.ownBroker?.[i],
       tradesXfl,
       tradesMarket,
-      valueOwn:          trend.value.ownBroker?.[i],
+      valueOwn:             trend.value.ownBroker?.[i],
       valueXfl,
       valueMarket,
-      pctOfMarketTrades: trend.trades.pctOfMarket[i],
-      pctOfXflTrades:    trend.trades.pctOfXfl?.[i],
-      pctOfMarketValue:  trend.value.pctOfMarket[i],
-      pctOfXflValue:     trend.value.pctOfXfl?.[i],
+      pctOfMarketTrades:    trend.trades.pctOfMarket[i],
+      pctOfXflTrades:       trend.trades.pctOfXfl?.[i],
+      pctOfMarketValue:     trend.value.pctOfMarket[i],
+      pctOfXflValue:        trend.value.pctOfXfl?.[i],
       pctXflOfMarketTrades: tradesMarket > 0 ? (tradesXfl / tradesMarket) * 100 : 0,
       pctXflOfMarketValue:  valueMarket > 0 ? (valueXfl / valueMarket) * 100 : 0,
     };
@@ -60,11 +68,18 @@ function buildData(trend: TrendResponse): ChartRow[] {
 }
 
 const PCT_FIELDS: Record<string, { market: keyof ChartRow; xfl?: keyof ChartRow }> = {
-  tradesOwn:    { market: 'pctOfMarketTrades', xfl: 'pctOfXflTrades' },
-  tradesXfl:    { market: 'pctXflOfMarketTrades' },
-  valueOwn:     { market: 'pctOfMarketValue', xfl: 'pctOfXflValue' },
-  valueXfl:     { market: 'pctXflOfMarketValue' },
+  tradesOwn: { market: 'pctOfMarketTrades', xfl: 'pctOfXflTrades' },
+  tradesXfl: { market: 'pctXflOfMarketTrades' },
+  valueOwn:  { market: 'pctOfMarketValue', xfl: 'pctOfXflValue' },
+  valueXfl:  { market: 'pctXflOfMarketValue' },
 };
+
+const PCT_DATA_KEYS = new Set([
+  'pctOfMarketTrades',
+  'pctOfMarketValue',
+  'pctXflOfMarketTrades',
+  'pctXflOfMarketValue',
+]);
 
 interface TooltipPayloadItem {
   name:    string;
@@ -83,23 +98,122 @@ function CustomTooltip({
 }) {
   if (!active || !payload?.length) return null;
 
+  const fullDate = payload[0]?.payload.fullDate ?? label;
+
   return (
     <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-4 py-3 text-sm">
-      <p className="font-bold text-gray-800 mb-2">{label}</p>
+      <p className="font-bold text-gray-800 mb-2">{fullDate}</p>
       {payload.map(p => {
+        const isPercent = PCT_DATA_KEYS.has(p.dataKey);
         const pctFields = PCT_FIELDS[p.dataKey];
         const pctOfMarket = pctFields ? (p.payload[pctFields.market] as number | undefined) : undefined;
         const pctOfXfl = pctFields?.xfl ? (p.payload[pctFields.xfl] as number | undefined) : undefined;
         return (
-          <p key={p.name} style={{ color: p.color }}>
-            {p.name}: {p.value.toLocaleString()}
-            {pctOfMarket !== undefined && ` (${pctOfMarket.toFixed(2)}% of market`}
-            {pctOfXfl !== undefined && `, ${pctOfXfl.toFixed(2)}% of XFL`}
-            {pctOfMarket !== undefined && ')'}
+          <p key={`${p.dataKey}-${p.name}`} style={{ color: p.color }}>
+            {p.name}: {isPercent ? `${p.value.toFixed(2)}%` : p.value.toLocaleString()}
+            {!isPercent && pctOfMarket !== undefined && ` (${pctOfMarket.toFixed(2)}% of market`}
+            {!isPercent && pctOfXfl !== undefined && `, ${pctOfXfl.toFixed(2)}% of XFL`}
+            {!isPercent && pctOfMarket !== undefined && ')'}
           </p>
         );
       })}
     </div>
+  );
+}
+
+interface TrendLineChartProps {
+  data:     ChartRow[];
+  metric:   MetricKind;
+  showOwn:  boolean;
+  ownLabel: string;
+  showBrush?: boolean;
+}
+
+function TrendLineChart({
+  data, metric, showOwn, ownLabel, showBrush = false,
+}: TrendLineChartProps) {
+  const isTrades = metric === 'trades';
+  const title = isTrades ? 'Trade Count Trend' : 'Value Trend';
+  const ownKey = isTrades ? 'tradesOwn' : 'valueOwn';
+  const xflKey = isTrades ? 'tradesXfl' : 'valueXfl';
+  const marketKey = isTrades ? 'tradesMarket' : 'valueMarket';
+  const pctKey = showOwn
+    ? (isTrades ? 'pctOfMarketTrades' : 'pctOfMarketValue')
+    : (isTrades ? 'pctXflOfMarketTrades' : 'pctXflOfMarketValue');
+  const labelSuffix = isTrades ? 'Trades' : 'Value';
+  const pctLabel = showOwn ? `${ownLabel} % of Market` : 'XFL % of Market';
+
+  return (
+    <section>
+      <h3 className="text-sm font-semibold text-gray-700 mb-3">{title}</h3>
+      <ResponsiveContainer width="100%" height={320}>
+        <LineChart
+          data={data}
+          syncId="trade-value-trend"
+          margin={{ top: 10, right: 34, left: 10, bottom: showBrush ? 18 : 0 }}
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+          <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+          <YAxis yAxisId="actual" tickFormatter={fmtTick} tick={{ fontSize: 11 }} />
+          <YAxis
+            yAxisId="percent"
+            orientation="right"
+            tickFormatter={fmtPct}
+            tick={{ fontSize: 11 }}
+          />
+          <Tooltip content={<CustomTooltip />} />
+          <Legend />
+          {showOwn && (
+            <Line
+              yAxisId="actual"
+              type="monotone"
+              dataKey={ownKey}
+              name={`${ownLabel} (${labelSuffix})`}
+              stroke="#f59e0b"
+              strokeWidth={2}
+              dot={false}
+            />
+          )}
+          <Line
+            yAxisId="actual"
+            type="monotone"
+            dataKey={xflKey}
+            name={`XFL Total (${labelSuffix})`}
+            stroke="#3b82f6"
+            strokeWidth={2}
+            dot={false}
+          />
+          <Line
+            yAxisId="actual"
+            type="monotone"
+            dataKey={marketKey}
+            name={`Market (${labelSuffix})`}
+            stroke="#10b981"
+            strokeWidth={2}
+            dot={false}
+          />
+          <Line
+            yAxisId="percent"
+            type="monotone"
+            dataKey={pctKey}
+            name={pctLabel}
+            stroke="#6366f1"
+            strokeWidth={2}
+            strokeDasharray="5 5"
+            dot={false}
+          />
+          {showBrush && (
+            <Brush
+              dataKey="date"
+              height={18}
+              travellerWidth={8}
+              stroke="#94a3b8"
+              tickFormatter={value => String(value)}
+            />
+          )}
+        </LineChart>
+      </ResponsiveContainer>
+    </section>
   );
 }
 
@@ -122,43 +236,10 @@ export default function TrendChart({ trend }: Props) {
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
       <h2 className="text-base font-semibold text-gray-700 mb-4">Trade Count &amp; Value Trend</h2>
-      <ResponsiveContainer width="100%" height={400}>
-        <LineChart data={data} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-          <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-          <YAxis yAxisId="trades" tickFormatter={fmtTick} tick={{ fontSize: 11 }} />
-          <YAxis yAxisId="value" orientation="right" tickFormatter={(v: number) => v.toLocaleString()} tick={{ fontSize: 11 }} />
-          <Tooltip content={<CustomTooltip />} />
-          <Legend />
-          {showOwn && (
-            <Line
-              yAxisId="trades"
-              type="monotone"
-              dataKey="tradesOwn"
-              name={`${ownLabel} (Trades)`}
-              stroke="#f59e0b"
-              strokeWidth={2}
-              dot={false}
-            />
-          )}
-          <Line yAxisId="trades" type="monotone" dataKey="tradesXfl" name="XFL Total (Trades)" stroke="#3b82f6" strokeWidth={2} dot={false} />
-          <Line yAxisId="trades" type="monotone" dataKey="tradesMarket" name="Market (Trades)" stroke="#10b981" strokeWidth={2} dot={false} />
-          {showOwn && (
-            <Line
-              yAxisId="value"
-              type="monotone"
-              dataKey="valueOwn"
-              name={`${ownLabel} (Value)`}
-              stroke="#f59e0b"
-              strokeWidth={2}
-              strokeDasharray="5 5"
-              dot={false}
-            />
-          )}
-          <Line yAxisId="value" type="monotone" dataKey="valueXfl" name="XFL Total (Value)" stroke="#3b82f6" strokeWidth={2} strokeDasharray="5 5" dot={false} />
-          <Line yAxisId="value" type="monotone" dataKey="valueMarket" name="Market (Value)" stroke="#10b981" strokeWidth={2} strokeDasharray="5 5" dot={false} />
-        </LineChart>
-      </ResponsiveContainer>
+      <div className="space-y-8">
+        <TrendLineChart data={data} metric="trades" showOwn={showOwn} ownLabel={ownLabel} />
+        <TrendLineChart data={data} metric="value" showOwn={showOwn} ownLabel={ownLabel} showBrush />
+      </div>
     </div>
   );
 }
