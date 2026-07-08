@@ -50,7 +50,7 @@ function buildData(trend: TrendResponse): ChartRow[] {
     const valueXfl = trend.value.xfl[i];
     const valueMarket = trend.value.market[i];
     return {
-      date:                 fmtDate(date),
+      date,
       fullDate:             date,
       tradesOwn:            trend.trades.ownBroker?.[i],
       tradesXfl,
@@ -152,7 +152,7 @@ function TrendLineChart({
         <LineChart
           data={data}
           syncId="trade-value-trend"
-          margin={{ top: 10, right: 34, left: 10, bottom: showBrush ? 18 : 0 }}
+          margin={{ top: 10, right: 34, left: 10, bottom: showBrush ? 34 : 16 }}
         >
           <CartesianGrid
             strokeDasharray="3 3"
@@ -160,7 +160,15 @@ function TrendLineChart({
             horizontal
             vertical
           />
-          <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+          <XAxis
+            dataKey="date"
+            height={82}
+            interval={0}
+            tick={{ fontSize: 11 }}
+            angle={-90}
+            textAnchor="end"
+            tickMargin={8}
+          />
           <YAxis yAxisId="actual" tickFormatter={fmtTick} tick={{ fontSize: 11 }} />
           <YAxis
             yAxisId="percent"

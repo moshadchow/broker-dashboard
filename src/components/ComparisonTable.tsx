@@ -6,6 +6,7 @@ interface Props {
   aggregateRow: AggregateRow;
   marketRow:    MarketRow | null;
   stockExchange: string;
+  showBrokerRows: boolean;
 }
 
 function ShareBadge({ pct, isMarket, noData }: { pct: number; isMarket?: boolean; noData?: boolean }) {
@@ -29,7 +30,13 @@ const TD = ({ children, className = '' }: { children: React.ReactNode; className
   <td className={`px-4 py-3 text-sm text-gray-700 whitespace-nowrap ${className}`}>{children}</td>
 );
 
-export default function ComparisonTable({ brokerRows, aggregateRow, marketRow, stockExchange }: Props) {
+export default function ComparisonTable({
+  brokerRows,
+  aggregateRow,
+  marketRow,
+  stockExchange,
+  showBrokerRows,
+}: Props) {
   const noMarket = marketRow === null;
   const marketLabel = stockExchange.trim() || 'DSE';
 
@@ -51,7 +58,7 @@ export default function ComparisonTable({ brokerRows, aggregateRow, marketRow, s
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
-          {brokerRows.map(row => (
+          {showBrokerRows && brokerRows.map(row => (
             <tr key={row.brokerId} className={row.fetchError ? 'bg-red-50' : 'hover:bg-gray-50'}>
               <TD className="font-medium">
                 {row.label}

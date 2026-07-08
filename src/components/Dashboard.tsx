@@ -16,6 +16,12 @@ function todayISO(): string {
   return `${year}-${month}-${day}`;
 }
 
+function formatDisplayDate(date: string): string {
+  const [year, month, day] = date.split('-');
+  if (!year || !month || !day) return date;
+  return `${day}/${month}/${year}`;
+}
+
 export default function Dashboard() {
   const { user, logout } = useAuth();
   const [params, setParams] = useState<DashboardParams>({
@@ -39,6 +45,7 @@ export default function Dashboard() {
   const hasData = fetchTrigger > 0 && !loading;
   const allFailed = hasData && brokerRows.every(r => r.fetchError);
   const marketMissing = error?.includes('Market data');
+  const showBrokerRows = trend?.trades.ownBroker !== undefined;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -111,12 +118,18 @@ export default function Dashboard() {
         {/* Data */}
         {hasData && !loading && (
           <>
-            <ComparisonTable
-              brokerRows={brokerRows}
-              aggregateRow={aggregateRow}
-              marketRow={marketRow}
-              stockExchange={activeParams?.stockExchange ?? params.stockExchange}
-            />
+            <section className="space-y-3">
+              <h2 className="text-lg font-semibold text-gray-800">
+                Trading Summary as of {formatDisplayDate(params.toDate)}
+              </h2>
+              <ComparisonTable
+                brokerRows={brokerRows}
+                aggregateRow={aggregateRow}
+                marketRow={marketRow}
+                stockExchange={activeParams?.stockExchange ?? params.stockExchange}
+                showBrokerRows={showBrokerRows}
+              />
+            </section>
             {trend && <TrendChart trend={trend} />}
           </>
         )}
