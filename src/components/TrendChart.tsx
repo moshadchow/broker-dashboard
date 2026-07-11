@@ -1,7 +1,10 @@
+import { useMemo } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, Brush,
 } from 'recharts';
+import { getChartTheme, type ChartTheme } from '../config/chartTheme';
+import { useTheme } from '../context/ThemeContext';
 import type { TrendResponse } from '../types';
 
 interface Props {
@@ -91,11 +94,12 @@ interface TooltipPayloadItem {
 }
 
 function CustomTooltip({
-  active, payload, label,
+  active, payload, label, chartTheme,
 }: {
   active?:  boolean;
   payload?: TooltipPayloadItem[];
   label?:   string;
+  chartTheme: ChartTheme;
 }) {
   if (!active || !payload?.length) return null;
 
@@ -103,8 +107,15 @@ function CustomTooltip({
   const displayDate = fullDate ? fmtDate(String(fullDate)) : label;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-4 py-3 text-sm">
-      <p className="font-bold text-gray-800 mb-2">{displayDate}</p>
+    <div
+      className="rounded-lg shadow-lg px-4 py-3 text-sm"
+      style={{
+        backgroundColor: chartTheme.tooltipBg,
+        border:          `1px solid ${chartTheme.tooltipBorder}`,
+        color:           chartTheme.textPrimary,
+      }}
+    >
+      <p className="font-bold mb-2">{displayDate}</p>
       {payload.map(p => {
         const isPercent = PCT_DATA_KEYS.has(p.dataKey);
         const pctFields = PCT_FIELDS[p.dataKey];
@@ -128,11 +139,12 @@ interface TrendLineChartProps {
   metric:   MetricKind;
   showOwn:  boolean;
   ownLabel: string;
+  chartTheme: ChartTheme;
   showBrush?: boolean;
 }
 
 function TrendLineChart({
-  data, metric, showOwn, ownLabel, showBrush = false,
+  data, metric, showOwn, ownLabel, chartTheme, showBrush = false,
 }: TrendLineChartProps) {
   const isTrades = metric === 'trades';
   const title = isTrades ? 'Trade Count Trend' : 'Value Trend';
@@ -147,7 +159,7 @@ function TrendLineChart({
 
   return (
     <section>
-      <h3 className="text-sm font-semibold text-gray-700 mb-3">{title}</h3>
+      <h3 className="text-sm font-semibold text-[var(--color-text-secondary)] mb-3">{title}</h3>
       <ResponsiveContainer width="100%" height={320}>
         <LineChart
           data={data}
@@ -156,7 +168,7 @@ function TrendLineChart({
         >
           <CartesianGrid
             strokeDasharray="3 3"
-            stroke="#f0f0f0"
+            stroke={chartTheme.grid}
             horizontal
             vertical
           />
@@ -164,27 +176,37 @@ function TrendLineChart({
             dataKey="date"
             height={82}
             interval={0}
-            tick={{ fontSize: 11 }}
+            tick={{ fontSize: 11, fill: chartTheme.axis }}
+            axisLine={{ stroke: chartTheme.axis }}
+            tickLine={{ stroke: chartTheme.axis }}
             angle={-90}
             textAnchor="end"
             tickMargin={8}
           />
-          <YAxis yAxisId="actual" tickFormatter={fmtTick} tick={{ fontSize: 11 }} />
+          <YAxis
+            yAxisId="actual"
+            tickFormatter={fmtTick}
+            tick={{ fontSize: 11, fill: chartTheme.axis }}
+            axisLine={{ stroke: chartTheme.axis }}
+            tickLine={{ stroke: chartTheme.axis }}
+          />
           <YAxis
             yAxisId="percent"
             orientation="right"
             tickFormatter={fmtPct}
-            tick={{ fontSize: 11 }}
+            tick={{ fontSize: 11, fill: chartTheme.axis }}
+            axisLine={{ stroke: chartTheme.axis }}
+            tickLine={{ stroke: chartTheme.axis }}
           />
-          <Tooltip content={<CustomTooltip />} />
-          <Legend />
+          <Tooltip content={<CustomTooltip chartTheme={chartTheme} />} />
+          <Legend wrapperStyle={{ color: chartTheme.textSecondary }} />
           {showOwn && (
             <Line
               yAxisId="actual"
               type="monotone"
               dataKey={ownKey}
               name={`${ownLabel} (${labelSuffix})`}
-              stroke="#f59e0b"
+              stroke={chartTheme.own}
               strokeWidth={2}
               dot={false}
             />
@@ -194,7 +216,7 @@ function TrendLineChart({
             type="monotone"
             dataKey={xflKey}
             name={`XFL Total (${labelSuffix})`}
-            stroke="#3b82f6"
+            stroke={chartTheme.xfl}
             strokeWidth={2}
             dot={false}
           />
@@ -203,7 +225,7 @@ function TrendLineChart({
             type="monotone"
             dataKey={marketKey}
             name={`Market (${labelSuffix})`}
-            stroke="#10b981"
+            stroke={chartTheme.market}
             strokeWidth={2}
             dot={false}
           />
@@ -212,7 +234,7 @@ function TrendLineChart({
             type="monotone"
             dataKey={pctKey}
             name={pctLabel}
-            stroke="#6366f1"
+            stroke={chartTheme.percent}
             strokeWidth={2}
             strokeDasharray="5 5"
             dot={false}
@@ -222,7 +244,8 @@ function TrendLineChart({
               dataKey="date"
               height={18}
               travellerWidth={8}
-              stroke="#94a3b8"
+              stroke={chartTheme.brush}
+              fill={chartTheme.surface}
               tickFormatter={value => String(value)}
             />
           )}
@@ -233,15 +256,17 @@ function TrendLineChart({
 }
 
 export default function TrendChart({ trend }: Props) {
+  const { theme } = useTheme();
+  const chartTheme = useMemo(() => getChartTheme(theme), [theme]);
   const data = buildData(trend);
   const showOwn = trend.trades.ownBroker !== undefined;
   const ownLabel = trend.ownBrokerLabel ?? 'Own Broker';
 
   if (data.length === 0) {
     return (
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
-        <h2 className="text-base font-semibold text-gray-700 mb-4">Value Trend &amp; Trade Count</h2>
-        <div className="h-[400px] flex items-center justify-center text-sm text-gray-500">
+      <div className="panel-pad">
+        <h2 className="text-base font-semibold text-[var(--color-text-secondary)] mb-4">Value Trend &amp; Trade Count</h2>
+        <div className="h-[400px] flex items-center justify-center text-sm text-[var(--color-text-muted)]">
           No data available
         </div>
       </div>
@@ -249,11 +274,11 @@ export default function TrendChart({ trend }: Props) {
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
-      <h2 className="text-base font-semibold text-gray-700 mb-4">Value Trend &amp; Trade Count</h2>
+    <div className="panel-pad">
+      <h2 className="text-base font-semibold text-[var(--color-text-secondary)] mb-4">Value Trend &amp; Trade Count</h2>
       <div className="space-y-8">
-        <TrendLineChart data={data} metric="value" showOwn={showOwn} ownLabel={ownLabel} showBrush />
-        <TrendLineChart data={data} metric="trades" showOwn={showOwn} ownLabel={ownLabel} showBrush />
+        <TrendLineChart data={data} metric="value" showOwn={showOwn} ownLabel={ownLabel} chartTheme={chartTheme} showBrush />
+        <TrendLineChart data={data} metric="trades" showOwn={showOwn} ownLabel={ownLabel} chartTheme={chartTheme} showBrush />
       </div>
     </div>
   );

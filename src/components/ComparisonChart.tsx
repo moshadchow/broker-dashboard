@@ -1,7 +1,10 @@
+import { useMemo } from 'react';
 import {
   ComposedChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ReferenceLine, ResponsiveContainer,
 } from 'recharts';
+import { getChartTheme, type ChartTheme } from '../config/chartTheme';
+import { useTheme } from '../context/ThemeContext';
 import type { BrokerRow, AggregateRow, MarketRow } from '../types';
 
 interface Props {
@@ -23,12 +26,13 @@ interface TooltipPayloadItem {
 }
 
 function CustomTooltip({
-  active, payload, label, marketRow,
+  active, payload, label, marketRow, chartTheme,
 }: {
   active?: boolean;
   payload?: TooltipPayloadItem[];
   label?: string;
   marketRow: MarketRow | null;
+  chartTheme: ChartTheme;
 }) {
   if (!active || !payload?.length) return null;
   const tradeVal = payload.find(p => p.name === 'Total Trade')?.value ?? 0;
@@ -41,15 +45,24 @@ function CustomTooltip({
     : 'N/A';
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-4 py-3 text-sm">
-      <p className="font-bold text-gray-800 mb-2">{label}</p>
-      <p className="text-blue-600">Trades: {tradeVal.toLocaleString()} <span className="text-gray-400">({tradePct} of market)</span></p>
-      <p className="text-emerald-600">Value: {valueVal.toLocaleString()} <span className="text-gray-400">({valuePct} of market)</span></p>
+    <div
+      className="rounded-lg shadow-lg px-4 py-3 text-sm"
+      style={{
+        backgroundColor: chartTheme.tooltipBg,
+        border:          `1px solid ${chartTheme.tooltipBorder}`,
+        color:           chartTheme.textPrimary,
+      }}
+    >
+      <p className="font-bold mb-2">{label}</p>
+      <p style={{ color: chartTheme.xfl }}>Trades: {tradeVal.toLocaleString()} <span style={{ color: chartTheme.textSecondary }}>({tradePct} of market)</span></p>
+      <p style={{ color: chartTheme.market }}>Value: {valueVal.toLocaleString()} <span style={{ color: chartTheme.textSecondary }}>({valuePct} of market)</span></p>
     </div>
   );
 }
 
 export default function ComparisonChart({ brokerRows, aggregateRow, marketRow }: Props) {
+  const { theme } = useTheme();
+  const chartTheme = useMemo(() => getChartTheme(theme), [theme]);
   const data = [
     ...brokerRows.map(r => ({
       name:       r.label,
@@ -64,30 +77,40 @@ export default function ComparisonChart({ brokerRows, aggregateRow, marketRow }:
   ];
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
-      <h2 className="text-base font-semibold text-gray-700 mb-4">Trade & Value Comparison</h2>
+    <div className="panel-pad">
+      <h2 className="text-base font-semibold text-[var(--color-text-secondary)] mb-4">Trade & Value Comparison</h2>
       <ResponsiveContainer width="100%" height={360}>
         <ComposedChart data={data} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-          <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-          <YAxis tickFormatter={fmtTick} tick={{ fontSize: 11 }} />
-          <Tooltip content={<CustomTooltip marketRow={marketRow} />} />
-          <Legend />
-          <Bar dataKey="totalTrade" name="Total Trade" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-          <Bar dataKey="totalValue" name="Total Value" fill="#10b981" radius={[4, 4, 0, 0]} />
+          <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
+          <XAxis
+            dataKey="name"
+            tick={{ fontSize: 12, fill: chartTheme.axis }}
+            axisLine={{ stroke: chartTheme.axis }}
+            tickLine={{ stroke: chartTheme.axis }}
+          />
+          <YAxis
+            tickFormatter={fmtTick}
+            tick={{ fontSize: 11, fill: chartTheme.axis }}
+            axisLine={{ stroke: chartTheme.axis }}
+            tickLine={{ stroke: chartTheme.axis }}
+          />
+          <Tooltip content={<CustomTooltip marketRow={marketRow} chartTheme={chartTheme} />} />
+          <Legend wrapperStyle={{ color: chartTheme.textSecondary }} />
+          <Bar dataKey="totalTrade" name="Total Trade" fill={chartTheme.xfl} radius={[4, 4, 0, 0]} />
+          <Bar dataKey="totalValue" name="Total Value" fill={chartTheme.market} radius={[4, 4, 0, 0]} />
           {marketRow && (
             <>
               <ReferenceLine
                 y={marketRow.trades}
-                stroke="#3b82f6"
+                stroke={chartTheme.xfl}
                 strokeDasharray="5 5"
-                label={{ value: 'Market Trade', position: 'insideTopRight', fontSize: 11, fill: '#3b82f6' }}
+                label={{ value: 'Market Trade', position: 'insideTopRight', fontSize: 11, fill: chartTheme.xfl }}
               />
               <ReferenceLine
                 y={marketRow.values}
-                stroke="#10b981"
+                stroke={chartTheme.market}
                 strokeDasharray="5 5"
-                label={{ value: 'Market Value', position: 'insideTopLeft', fontSize: 11, fill: '#10b981' }}
+                label={{ value: 'Market Value', position: 'insideTopLeft', fontSize: 11, fill: chartTheme.market }}
               />
             </>
           )}

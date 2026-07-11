@@ -3,13 +3,13 @@ import * as adminService from '../../services/adminService';
 import type { AdminBroker, AdminOmsEndpoint } from '../../types/auth';
 
 const TH = ({ children }: { children: React.ReactNode }) => (
-  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">
+  <th className="table-th">
     {children}
   </th>
 );
 
 const TD = ({ children, className = '', colSpan }: { children: React.ReactNode; className?: string; colSpan?: number }) => (
-  <td colSpan={colSpan} className={`px-4 py-3 text-sm text-gray-700 whitespace-nowrap ${className}`}>{children}</td>
+  <td colSpan={colSpan} className={`table-td ${className}`}>{children}</td>
 );
 
 export default function BrokerManagement() {
@@ -105,19 +105,19 @@ export default function BrokerManagement() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-bold text-gray-900">Brokers</h2>
-        <p className="text-sm text-gray-500">Manage the brokers available for user assignment.</p>
+        <h2 className="text-lg font-bold text-[var(--color-text-primary)]">Brokers</h2>
+        <p className="text-sm text-[var(--color-text-secondary)]">Manage the brokers available for user assignment.</p>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-800">
+        <div className="alert-error">
           {error}
         </div>
       )}
 
-      <form onSubmit={handleCreate} className="flex flex-wrap items-end gap-4 bg-white border border-gray-200 rounded-xl px-6 py-4 shadow-sm">
+      <form onSubmit={handleCreate} className="panel flex flex-wrap items-end gap-4 px-6 py-4">
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Broker ID</label>
+          <label className="field-label">Broker ID</label>
           <input
             type="text"
             required
@@ -125,12 +125,12 @@ export default function BrokerManagement() {
             value={newBrokerId}
             onChange={e => setNewBrokerId(e.target.value)}
             placeholder="e.g. SNM"
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-32 uppercase focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="field w-32 uppercase"
           />
         </div>
 
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Broker Label</label>
+          <label className="field-label">Broker Label</label>
           <input
             type="text"
             required
@@ -138,28 +138,28 @@ export default function BrokerManagement() {
             value={newBrokerLabel}
             onChange={e => setNewBrokerLabel(e.target.value)}
             placeholder="e.g. SNM Securities"
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="field w-64"
           />
         </div>
 
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">External API ID</label>
+          <label className="field-label">External API ID</label>
           <input
             type="text"
             maxLength={32}
             value={newExternalApiId}
             onChange={e => setNewExternalApiId(e.target.value)}
             placeholder="e.g. 681caf09c0024a529d5a0fe4"
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="field w-64"
           />
         </div>
 
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">API Endpoint</label>
+          <label className="field-label">API Endpoint</label>
           <select
             value={newApiEndpoint}
             onChange={e => setNewApiEndpoint(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-40 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="field w-40"
           >
             <option value="">— default (primary) —</option>
             {omsEndpoints.map(endpoint => (
@@ -171,15 +171,15 @@ export default function BrokerManagement() {
         <button
           type="submit"
           disabled={creating}
-          className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white text-sm font-semibold rounded-lg transition-colors"
+          className="button-primary"
         >
           {creating ? 'Adding…' : 'Add Broker'}
         </button>
       </form>
 
-      <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+      <div className="table-wrap">
         <table className="w-full text-left">
-          <thead className="bg-gray-50 border-b border-gray-200">
+          <thead className="table-head">
             <tr>
               <TH>Broker ID</TH>
               <TH>Label</TH>
@@ -189,15 +189,15 @@ export default function BrokerManagement() {
               <TH>Actions</TH>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="table-body">
             {loading && (
-              <tr><TD className="text-gray-400" colSpan={6}>Loading…</TD></tr>
+              <tr><TD className="text-[var(--color-text-muted)]" colSpan={6}>Loading…</TD></tr>
             )}
             {!loading && brokers.length === 0 && (
-              <tr><TD className="text-gray-400" colSpan={6}>No brokers yet.</TD></tr>
+              <tr><TD className="text-[var(--color-text-muted)]" colSpan={6}>No brokers yet.</TD></tr>
             )}
             {!loading && brokers.map(broker => (
-              <tr key={broker.brokerId} className="hover:bg-gray-50">
+              <tr key={broker.brokerId} className="table-row">
                 <TD className="font-medium">{broker.brokerId}</TD>
                 <TD>
                   {editingId === broker.brokerId ? (
@@ -205,7 +205,7 @@ export default function BrokerManagement() {
                       type="text"
                       value={editLabel}
                       onChange={e => setEditLabel(e.target.value)}
-                      className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="field-compact w-64"
                     />
                   ) : (
                     broker.brokerLabel
@@ -218,10 +218,10 @@ export default function BrokerManagement() {
                       maxLength={32}
                       value={editExternalApiId}
                       onChange={e => setEditExternalApiId(e.target.value)}
-                      className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="field-compact w-64"
                     />
                   ) : (
-                    broker.externalApiId ?? <span className="text-gray-400">—</span>
+                    broker.externalApiId ?? <span className="text-[var(--color-text-muted)]">—</span>
                   )}
                 </TD>
                 <TD>
@@ -229,7 +229,7 @@ export default function BrokerManagement() {
                     <select
                       value={editApiEndpoint}
                       onChange={e => setEditApiEndpoint(e.target.value)}
-                      className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-36 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="field-compact w-36"
                     >
                       <option value="">— default (primary) —</option>
                       {omsEndpoints.map(endpoint => (
@@ -237,7 +237,7 @@ export default function BrokerManagement() {
                       ))}
                     </select>
                   ) : (
-                    broker.apiEndpoint ?? <span className="text-gray-400">primary</span>
+                    broker.apiEndpoint ?? <span className="text-[var(--color-text-muted)]">primary</span>
                   )}
                 </TD>
                 <TD>{new Date(broker.updatedAt).toLocaleString()}</TD>
@@ -246,13 +246,13 @@ export default function BrokerManagement() {
                     <div className="flex gap-2">
                       <button
                         onClick={() => saveEdit(broker.brokerId)}
-                        className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-semibold transition-colors"
+                        className="button-success"
                       >
                         Save
                       </button>
                       <button
                         onClick={() => setEditingId(null)}
-                        className="px-2 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded text-xs font-semibold transition-colors"
+                        className="button-muted"
                       >
                         Cancel
                       </button>
@@ -261,13 +261,13 @@ export default function BrokerManagement() {
                     <div className="flex gap-2">
                       <button
                         onClick={() => startEdit(broker)}
-                        className="px-2 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded text-xs font-semibold transition-colors"
+                        className="button-muted"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => handleDelete(broker.brokerId)}
-                        className="px-2 py-1 bg-red-100 hover:bg-red-200 text-red-700 rounded text-xs font-semibold transition-colors"
+                        className="button-danger"
                       >
                         Delete
                       </button>

@@ -3,13 +3,13 @@ import * as adminService from '../../services/adminService';
 import type { AdminOmsEndpoint } from '../../types/auth';
 
 const TH = ({ children }: { children: React.ReactNode }) => (
-  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">
+  <th className="table-th">
     {children}
   </th>
 );
 
 const TD = ({ children, className = '', colSpan }: { children: React.ReactNode; className?: string; colSpan?: number }) => (
-  <td colSpan={colSpan} className={`px-4 py-3 text-sm text-gray-700 whitespace-nowrap ${className}`}>{children}</td>
+  <td colSpan={colSpan} className={`table-td ${className}`}>{children}</td>
 );
 
 export default function EndpointManagement() {
@@ -119,19 +119,19 @@ export default function EndpointManagement() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-bold text-gray-900">API Endpoints</h2>
-        <p className="text-sm text-gray-500">Manage the OMS endpoints brokers are routed to (base URL + service-account credentials).</p>
+        <h2 className="text-lg font-bold text-[var(--color-text-primary)]">API Endpoints</h2>
+        <p className="text-sm text-[var(--color-text-secondary)]">Manage the OMS endpoints brokers are routed to (base URL + service-account credentials).</p>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-800">
+        <div className="alert-error">
           {error}
         </div>
       )}
 
-      <form onSubmit={handleCreate} className="flex flex-wrap items-end gap-4 bg-white border border-gray-200 rounded-xl px-6 py-4 shadow-sm">
+      <form onSubmit={handleCreate} className="panel flex flex-wrap items-end gap-4 px-6 py-4">
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Name</label>
+          <label className="field-label">Name</label>
           <input
             type="text"
             required
@@ -139,12 +139,12 @@ export default function EndpointManagement() {
             value={newName}
             onChange={e => setNewName(e.target.value)}
             placeholder="e.g. secondary"
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-32 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="field w-32"
           />
         </div>
 
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Base URL</label>
+          <label className="field-label">Base URL</label>
           <input
             type="text"
             required
@@ -152,12 +152,12 @@ export default function EndpointManagement() {
             value={newBaseUrl}
             onChange={e => setNewBaseUrl(e.target.value)}
             placeholder="https://…"
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="field w-64"
           />
         </div>
 
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Credential Name</label>
+          <label className="field-label">Credential Name</label>
           <input
             type="text"
             required
@@ -165,67 +165,67 @@ export default function EndpointManagement() {
             value={newCredentialName}
             onChange={e => setNewCredentialName(e.target.value)}
             placeholder="e.g. secondary_oms"
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-40 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="field w-40"
           />
         </div>
 
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Username</label>
+          <label className="field-label">Username</label>
           <input
             type="text"
             required
             maxLength={100}
             value={newUsername}
             onChange={e => setNewUsername(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-40 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="field w-40"
           />
         </div>
 
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Password</label>
+          <label className="field-label">Password</label>
           <input
             type="password"
             required
             value={newPassword}
             onChange={e => setNewPassword(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-40 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="field w-40"
           />
         </div>
 
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Device ID</label>
+          <label className="field-label">Device ID</label>
           <input
             type="text"
             required
             maxLength={100}
             value={newDeviceId}
             onChange={e => setNewDeviceId(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-40 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="field w-40"
           />
         </div>
 
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">App Type</label>
+          <label className="field-label">App Type</label>
           <input
             type="number"
             value={newAppType}
             onChange={e => setNewAppType(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-20 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="field w-20"
           />
         </div>
 
         <button
           type="submit"
           disabled={creating}
-          className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white text-sm font-semibold rounded-lg transition-colors"
+          className="button-primary"
         >
           {creating ? 'Adding…' : 'Add Endpoint'}
         </button>
       </form>
 
-      <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+      <div className="table-wrap">
         <table className="w-full text-left">
-          <thead className="bg-gray-50 border-b border-gray-200">
+          <thead className="table-head">
             <tr>
               <TH>Name</TH>
               <TH>Base URL</TH>
@@ -237,15 +237,15 @@ export default function EndpointManagement() {
               <TH>Actions</TH>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="table-body">
             {loading && (
-              <tr><TD className="text-gray-400" colSpan={8}>Loading…</TD></tr>
+              <tr><TD className="text-[var(--color-text-muted)]" colSpan={8}>Loading…</TD></tr>
             )}
             {!loading && endpoints.length === 0 && (
-              <tr><TD className="text-gray-400" colSpan={8}>No API endpoints yet.</TD></tr>
+              <tr><TD className="text-[var(--color-text-muted)]" colSpan={8}>No API endpoints yet.</TD></tr>
             )}
             {!loading && endpoints.map(endpoint => (
-              <tr key={endpoint.name} className="hover:bg-gray-50">
+              <tr key={endpoint.name} className="table-row">
                 <TD className="font-medium">{endpoint.name}</TD>
                 <TD>
                   {editingName === endpoint.name ? (
@@ -253,20 +253,20 @@ export default function EndpointManagement() {
                       type="text"
                       value={editBaseUrl}
                       onChange={e => setEditBaseUrl(e.target.value)}
-                      className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="field-compact w-64"
                     />
                   ) : (
                     endpoint.baseUrl
                   )}
                 </TD>
-                <TD className="text-gray-400">{endpoint.credentialName}</TD>
+                <TD className="text-[var(--color-text-muted)]">{endpoint.credentialName}</TD>
                 <TD>
                   {editingName === endpoint.name ? (
                     <input
                       type="text"
                       value={editUsername}
                       onChange={e => setEditUsername(e.target.value)}
-                      className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-40 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="field-compact w-40"
                     />
                   ) : (
                     endpoint.username
@@ -278,7 +278,7 @@ export default function EndpointManagement() {
                       type="text"
                       value={editDeviceId}
                       onChange={e => setEditDeviceId(e.target.value)}
-                      className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-40 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="field-compact w-40"
                     />
                   ) : (
                     endpoint.deviceId
@@ -290,7 +290,7 @@ export default function EndpointManagement() {
                       type="number"
                       value={editAppType}
                       onChange={e => setEditAppType(e.target.value)}
-                      className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-16 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="field-compact w-16"
                     />
                   ) : (
                     endpoint.appType
@@ -306,13 +306,13 @@ export default function EndpointManagement() {
                           placeholder="New password"
                           value={editPassword}
                           onChange={e => setEditPassword(e.target.value)}
-                          className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-36 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="field-compact w-36"
                         />
                       ) : (
                         <button
                           type="button"
                           onClick={() => setEditResetPassword(true)}
-                          className="text-xs text-blue-600 hover:text-blue-800 font-semibold text-left"
+                          className="text-xs text-[var(--color-primary)] hover:text-[var(--color-primary-hover)] font-semibold text-left focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)] rounded"
                         >
                           Reset password
                         </button>
@@ -320,13 +320,13 @@ export default function EndpointManagement() {
                       <div className="flex gap-2">
                         <button
                           onClick={() => saveEdit(endpoint.name)}
-                          className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-semibold transition-colors"
+                          className="button-success"
                         >
                           Save
                         </button>
                         <button
                           onClick={() => setEditingName(null)}
-                          className="px-2 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded text-xs font-semibold transition-colors"
+                          className="button-muted"
                         >
                           Cancel
                         </button>
@@ -336,13 +336,13 @@ export default function EndpointManagement() {
                     <div className="flex gap-2">
                       <button
                         onClick={() => startEdit(endpoint)}
-                        className="px-2 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded text-xs font-semibold transition-colors"
+                        className="button-muted"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => handleDelete(endpoint.name)}
-                        className="px-2 py-1 bg-red-100 hover:bg-red-200 text-red-700 rounded text-xs font-semibold transition-colors"
+                        className="button-danger"
                       >
                         Delete
                       </button>

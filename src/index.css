@@ -1,1 +1,246 @@
 @import "tailwindcss";
+
+:root {
+  color-scheme: light;
+
+  --color-bg: #f8fafc;
+  --color-surface: #ffffff;
+  --color-surface-elevated: #ffffff;
+  --color-surface-muted: #f1f5f9;
+  --color-header: #111827;
+  --color-header-muted: #374151;
+  --color-header-hover: #4b5563;
+
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-soft: #dbeafe;
+  --color-secondary: #475569;
+  --color-secondary-soft: #e2e8f0;
+  --color-success: #059669;
+  --color-success-hover: #047857;
+  --color-success-soft: #d1fae5;
+  --color-warning: #b45309;
+  --color-warning-soft: #fef3c7;
+  --color-error: #dc2626;
+  --color-error-hover: #b91c1c;
+  --color-error-soft: #fee2e2;
+
+  --color-border: #e2e8f0;
+  --color-border-strong: #cbd5e1;
+  --color-divider: #e5e7eb;
+  --color-text-primary: #111827;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748b;
+  --color-text-disabled: #94a3b8;
+  --color-text-inverse: #ffffff;
+
+  --color-input-bg: #ffffff;
+  --color-input-border: #cbd5e1;
+  --color-input-placeholder: #94a3b8;
+  --color-focus: #2563eb;
+
+  --color-row-hover: #f8fafc;
+  --color-row-alt: #f8fafc;
+  --color-row-summary: #eff6ff;
+  --color-row-error: #fef2f2;
+
+  --color-chart-grid: #e5e7eb;
+  --color-chart-axis: #64748b;
+  --color-chart-tooltip-bg: #ffffff;
+  --color-chart-tooltip-border: #cbd5e1;
+  --color-chart-brush: #94a3b8;
+  --color-chart-own: #d97706;
+  --color-chart-xfl: #2563eb;
+  --color-chart-market: #059669;
+  --color-chart-percent: #4f46e5;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-bg: #0f172a;
+  --color-surface: #182235;
+  --color-surface-elevated: #1e293b;
+  --color-surface-muted: #263449;
+  --color-header: #020617;
+  --color-header-muted: #1e293b;
+  --color-header-hover: #334155;
+
+  --color-primary: #60a5fa;
+  --color-primary-hover: #93c5fd;
+  --color-primary-soft: #1e3a8a;
+  --color-secondary: #cbd5e1;
+  --color-secondary-soft: #334155;
+  --color-success: #34d399;
+  --color-success-hover: #6ee7b7;
+  --color-success-soft: #064e3b;
+  --color-warning: #fbbf24;
+  --color-warning-soft: #78350f;
+  --color-error: #f87171;
+  --color-error-hover: #fca5a5;
+  --color-error-soft: #7f1d1d;
+
+  --color-border: #334155;
+  --color-border-strong: #475569;
+  --color-divider: #334155;
+  --color-text-primary: #f8fafc;
+  --color-text-secondary: #cbd5e1;
+  --color-text-muted: #94a3b8;
+  --color-text-disabled: #64748b;
+  --color-text-inverse: #f8fafc;
+
+  --color-input-bg: #0f172a;
+  --color-input-border: #475569;
+  --color-input-placeholder: #94a3b8;
+  --color-focus: #93c5fd;
+
+  --color-row-hover: #223047;
+  --color-row-alt: #1e293b;
+  --color-row-summary: #172554;
+  --color-row-error: #450a0a;
+
+  --color-chart-grid: #334155;
+  --color-chart-axis: #cbd5e1;
+  --color-chart-tooltip-bg: #111827;
+  --color-chart-tooltip-border: #475569;
+  --color-chart-brush: #64748b;
+  --color-chart-own: #fbbf24;
+  --color-chart-xfl: #60a5fa;
+  --color-chart-market: #34d399;
+  --color-chart-percent: #a78bfa;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+}
+
+@layer components {
+  .app-page {
+    @apply min-h-screen bg-[var(--color-bg)] text-[var(--color-text-primary)];
+  }
+
+  .app-header {
+    @apply bg-[var(--color-header)] text-[var(--color-text-inverse)] px-6 py-4 shadow flex items-center justify-between gap-4;
+  }
+
+  .header-chip {
+    @apply px-3 py-1.5 bg-[var(--color-header-muted)] rounded-lg text-xs font-semibold text-slate-200;
+  }
+
+  .header-action {
+    @apply px-3 py-1.5 bg-[var(--color-header-muted)] hover:bg-[var(--color-header-hover)] rounded-lg text-xs font-semibold text-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)] focus:ring-offset-2 focus:ring-offset-[var(--color-header)];
+  }
+
+  .panel {
+    @apply bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-sm;
+  }
+
+  .panel-pad {
+    @apply bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-sm p-6;
+  }
+
+  .field {
+    @apply border border-[var(--color-input-border)] bg-[var(--color-input-bg)] text-[var(--color-text-primary)] placeholder:text-[var(--color-input-placeholder)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)];
+  }
+
+  .field-compact {
+    @apply border border-[var(--color-input-border)] bg-[var(--color-input-bg)] text-[var(--color-text-primary)] placeholder:text-[var(--color-input-placeholder)] rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)];
+  }
+
+  .field-label {
+    @apply text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide;
+  }
+
+  .button-primary {
+    @apply px-6 py-2 bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:bg-[var(--color-secondary-soft)] disabled:text-[var(--color-text-disabled)] disabled:cursor-not-allowed text-white rounded-lg text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)];
+  }
+
+  .button-small {
+    @apply px-2 py-1 rounded text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)];
+  }
+
+  .button-muted {
+    @apply px-2 py-1 rounded text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)] bg-[var(--color-secondary-soft)] hover:bg-[var(--color-border-strong)] text-[var(--color-text-primary)];
+  }
+
+  .button-success {
+    @apply px-2 py-1 rounded text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)] bg-[var(--color-success)] hover:bg-[var(--color-success-hover)] text-white;
+  }
+
+  .button-danger {
+    @apply px-2 py-1 rounded text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)] bg-[var(--color-error-soft)] hover:bg-[var(--color-error)] text-[var(--color-error)] hover:text-white disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  .alert-warning {
+    @apply bg-[var(--color-warning-soft)] border border-[var(--color-warning)] rounded-lg px-4 py-3 text-sm text-[var(--color-warning)];
+  }
+
+  .alert-error {
+    @apply bg-[var(--color-error-soft)] border border-[var(--color-error)] rounded-lg px-4 py-3 text-sm text-[var(--color-error)];
+  }
+
+  .alert-success {
+    @apply bg-[var(--color-success-soft)] border border-[var(--color-success)] rounded-lg px-4 py-3 text-sm text-[var(--color-success)];
+  }
+
+  .table-wrap {
+    @apply overflow-x-auto rounded-xl border border-[var(--color-border)] shadow-sm bg-[var(--color-surface)];
+  }
+
+  .table-head {
+    @apply bg-[var(--color-surface-muted)] border-b border-[var(--color-border)];
+  }
+
+  .table-body {
+    @apply divide-y divide-[var(--color-divider)];
+  }
+
+  .table-th {
+    @apply px-4 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide whitespace-nowrap;
+  }
+
+  .table-td {
+    @apply px-4 py-3 text-sm text-[var(--color-text-secondary)] whitespace-nowrap;
+  }
+
+  .table-row {
+    @apply hover:bg-[var(--color-row-hover)] transition-colors;
+  }
+
+  .badge {
+    @apply px-2 py-0.5 rounded text-xs font-semibold;
+  }
+
+  .badge-muted {
+    @apply px-2 py-0.5 rounded text-xs font-semibold bg-[var(--color-secondary-soft)] text-[var(--color-text-secondary)];
+  }
+
+  .badge-primary {
+    @apply px-2 py-0.5 rounded text-xs font-semibold bg-[var(--color-primary-soft)] text-[var(--color-primary)];
+  }
+
+  .badge-success {
+    @apply px-2 py-0.5 rounded text-xs font-semibold bg-[var(--color-success-soft)] text-[var(--color-success)];
+  }
+
+  .badge-warning {
+    @apply px-2 py-0.5 rounded text-xs font-semibold bg-[var(--color-warning-soft)] text-[var(--color-warning)];
+  }
+
+  .badge-error {
+    @apply px-2 py-0.5 rounded text-xs font-semibold bg-[var(--color-error-soft)] text-[var(--color-error)];
+  }
+}

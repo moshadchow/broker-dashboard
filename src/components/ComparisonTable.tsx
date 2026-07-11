@@ -10,24 +10,24 @@ interface Props {
 }
 
 function ShareBadge({ pct, isMarket, noData }: { pct: number; isMarket?: boolean; noData?: boolean }) {
-  if (noData) return <span className="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-500">N/A</span>;
-  if (isMarket) return <span className="px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-800 font-semibold">100%</span>;
+  if (noData) return <span className="badge-muted">N/A</span>;
+  if (isMarket) return <span className="badge-primary">100%</span>;
   const color = pct >= MARKET_SHARE_THRESHOLD
-    ? 'bg-green-100 text-green-800'
-    : 'bg-amber-100 text-amber-800';
-  return <span className={`px-2 py-0.5 rounded text-xs font-semibold ${color}`}>{pct.toFixed(2)}%</span>;
+    ? 'badge-success'
+    : 'badge-warning';
+  return <span className={color}>{pct.toFixed(2)}%</span>;
 }
 
 function fmt(n: number) { return n.toLocaleString(); }
 
 const TH = ({ children }: { children: React.ReactNode }) => (
-  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">
+  <th className="table-th">
     {children}
   </th>
 );
 
 const TD = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
-  <td className={`px-4 py-3 text-sm text-gray-700 whitespace-nowrap ${className}`}>{children}</td>
+  <td className={`table-td ${className}`}>{children}</td>
 );
 
 export default function ComparisonTable({
@@ -41,9 +41,9 @@ export default function ComparisonTable({
   const marketLabel = stockExchange.trim() || 'DSE';
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-gray-200 shadow-sm">
+    <div className="table-wrap">
       <table className="w-full text-left">
-        <thead className="bg-gray-50 border-b border-gray-200">
+        <thead className="table-head">
           <tr>
             <TH>Broker</TH>
             <TH>Exec Reports</TH>
@@ -57,13 +57,13 @@ export default function ComparisonTable({
             <TH>Value Share %</TH>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody className="table-body">
           {showBrokerRows && brokerRows.map(row => (
-            <tr key={row.brokerId} className={row.fetchError ? 'bg-red-50' : 'hover:bg-gray-50'}>
+            <tr key={row.brokerId} className={row.fetchError ? 'bg-[var(--color-row-error)]' : 'table-row'}>
               <TD className="font-medium">
                 {row.label}
                 {row.fetchError && (
-                  <span className="ml-2 px-1.5 py-0.5 rounded text-xs bg-red-100 text-red-700">Error</span>
+                  <span className="badge-error ml-2">Error</span>
                 )}
               </TD>
               {row.fetchError ? (
@@ -85,8 +85,8 @@ export default function ComparisonTable({
           ))}
 
           {/* Aggregate row */}
-          <tr className="bg-blue-50 font-semibold">
-            <TD className="font-bold text-blue-800">Σ XFL</TD>
+          <tr className="bg-[var(--color-row-summary)] font-semibold">
+            <TD className="font-bold text-[var(--color-primary)]">Σ XFL</TD>
             <TD>{fmt(aggregateRow.totalExecutionReport)}</TD>
             <TD>{fmt(aggregateRow.totalTrade)}</TD>
             <TD>{fmt(aggregateRow.buyTrade)}</TD>
@@ -99,8 +99,8 @@ export default function ComparisonTable({
           </tr>
 
           {/* Market row */}
-          <tr className="bg-gray-50 border-t-2 border-gray-300">
-            <TD className="font-bold text-gray-600">{marketLabel}</TD>
+          <tr className="bg-[var(--color-row-alt)] border-t-2 border-[var(--color-border-strong)]">
+            <TD className="font-bold text-[var(--color-text-secondary)]">{marketLabel}</TD>
             <TD>—</TD>
             <TD>{marketRow ? fmt(marketRow.trades) : '—'}</TD>
             <TD>—</TD>

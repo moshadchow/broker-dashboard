@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import FilterBar from './FilterBar';
 import ComparisonTable from './ComparisonTable';
 import TrendChart from './TrendChart';
+import ThemeToggle from './ThemeToggle';
 import type { DashboardParams } from '../types';
 
 function todayISO(): string {
@@ -48,33 +49,34 @@ export default function Dashboard() {
   const showBrokerRows = trend?.trades.ownBroker !== undefined;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="app-page">
       {/* Header */}
-      <header className="bg-gray-900 text-white px-6 py-4 shadow flex items-center justify-between">
+      <header className="app-header">
         <div>
           <h1 className="text-xl font-bold tracking-tight">
-            Broker Execution <span className="text-blue-400">vs</span> Market Dashboard
+            Broker Execution <span className="text-[var(--color-primary)]">vs</span> Market Dashboard
           </h1>
-          <p className="text-xs text-gray-400 mt-0.5">
+          <p className="text-xs text-slate-300 mt-0.5">
             UAT · {params.stockExchange} · {params.fromDate} → {params.toDate}
           </p>
         </div>
         <div className="flex items-center gap-3 text-sm">
-          <span className="px-3 py-1.5 bg-gray-700 rounded-lg text-xs font-semibold text-gray-300">
+          <ThemeToggle />
+          <span className="header-chip">
             Auto-Auth Pipeline
           </span>
-          <span className="px-3 py-1.5 bg-gray-700 rounded-lg text-xs font-semibold text-gray-300">
+          <span className="header-chip">
             {user?.email}
           </span>
           <Link
             to="/profile"
-            className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs font-semibold text-gray-300 transition-colors"
+            className="header-action"
           >
             Profile
           </Link>
           <button
             onClick={() => logout()}
-            className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs font-semibold text-gray-300 transition-colors"
+            className="header-action"
           >
             Sign out
           </button>
@@ -91,16 +93,16 @@ export default function Dashboard() {
 
         {/* Banners */}
         {marketMissing && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+          <div className="alert-warning">
             ⚠️ {error}
           </div>
         )}
         {allFailed && (
-          <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-800 flex items-center justify-between">
+          <div className="alert-error flex items-center justify-between">
             <span>❌ All broker fetches failed. Check your session and network.</span>
             <button
               onClick={() => setFetchTrigger(t => t + 1)}
-              className="ml-4 px-3 py-1 bg-red-600 text-white rounded text-xs font-semibold hover:bg-red-700"
+              className="ml-4 px-3 py-1 bg-[var(--color-error)] text-white rounded text-xs font-semibold hover:bg-[var(--color-error-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus)]"
             >
               Retry
             </button>
@@ -110,8 +112,8 @@ export default function Dashboard() {
         {/* Loading skeleton */}
         {loading && (
           <div className="space-y-4">
-            <div className="h-48 bg-gray-200 rounded-xl animate-pulse" />
-            <div className="h-80 bg-gray-200 rounded-xl animate-pulse" />
+            <div className="h-48 bg-[var(--color-surface-muted)] rounded-xl animate-pulse" />
+            <div className="h-80 bg-[var(--color-surface-muted)] rounded-xl animate-pulse" />
           </div>
         )}
 
@@ -119,7 +121,7 @@ export default function Dashboard() {
         {hasData && !loading && (
           <>
             <section className="space-y-3">
-              <h2 className="text-lg font-semibold text-gray-800">
+              <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
                 Trading Summary as of {formatDisplayDate(params.toDate)}
               </h2>
               <ComparisonTable
@@ -136,8 +138,8 @@ export default function Dashboard() {
 
         {/* Empty state */}
         {fetchTrigger === 0 && (
-          <div className="text-center py-16 text-gray-400 text-sm">
-            Set filters above and click <strong className="text-gray-600">Fetch Data</strong> to load.
+          <div className="text-center py-16 text-[var(--color-text-muted)] text-sm">
+            Set filters above and click <strong className="text-[var(--color-text-primary)]">Fetch Data</strong> to load.
           </div>
         )}
       </main>

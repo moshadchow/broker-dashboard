@@ -11,7 +11,7 @@ export default function ProtectedRoute({ roles }: ProtectedRouteProps) {
 
   if (status === 'checking') {
     return (
-      <div className="min-h-screen flex items-center justify-center text-gray-400 text-sm">
+      <div className="app-page flex items-center justify-center text-[var(--color-text-muted)] text-sm">
         Checking session…
       </div>
     );
