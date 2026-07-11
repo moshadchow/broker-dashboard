@@ -25,6 +25,7 @@ class Settings(BaseSettings):
 
     scheduled_time: str = "15:00"
     scheduled_days: str = "sun,mon,tue,wed,thu"
+    excluded_weekdays: str = "fri,sat"
     app_timezone: str = "Asia/Dhaka"
 
     default_stock_exchange: str = "DSE"

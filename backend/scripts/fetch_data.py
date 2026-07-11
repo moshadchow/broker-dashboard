@@ -44,6 +44,23 @@ from app.utils.time import today_local  # noqa: E402
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("fetch_data")
 
+WEEKDAY_NAMES = {
+    "monday": 0,
+    "mon": 0,
+    "tuesday": 1,
+    "tue": 1,
+    "wednesday": 2,
+    "wed": 2,
+    "thursday": 3,
+    "thu": 3,
+    "friday": 4,
+    "fri": 4,
+    "saturday": 5,
+    "sat": 5,
+    "sunday": 6,
+    "sun": 6,
+}
+
 
 def get_or_refresh_token(db, credentials: CredentialSet) -> str:
     try:
@@ -52,8 +69,39 @@ def get_or_refresh_token(db, credentials: CredentialSet) -> str:
         return auth_service.auth(db, credentials)
 
 
-def is_weekend(target_date: date) -> bool:
-    return target_date.weekday() in (4, 5)
+def parse_excluded_weekdays(value: str) -> set[int]:
+    weekdays: set[int] = set()
+    invalid: list[str] = []
+
+    for raw_part in value.split(","):
+        part = raw_part.strip().lower()
+        if not part:
+            continue
+
+        if part.isdigit():
+            iso_weekday = int(part)
+            if 1 <= iso_weekday <= 7:
+                weekdays.add(iso_weekday - 1)
+            else:
+                invalid.append(raw_part.strip())
+            continue
+
+        weekday = WEEKDAY_NAMES.get(part)
+        if weekday is None:
+            invalid.append(raw_part.strip())
+        else:
+            weekdays.add(weekday)
+
+    if invalid:
+        raise ValueError(f"invalid excluded_weekdays value(s): {', '.join(invalid)}")
+    if not weekdays:
+        raise ValueError("excluded_weekdays must include at least one weekday")
+
+    return weekdays
+
+
+def is_excluded_weekday(target_date: date, excluded_weekdays: set[int]) -> bool:
+    return target_date.weekday() in excluded_weekdays
 
 
 def fetch_market_with_retry(
@@ -106,6 +154,7 @@ def run(from_date: date, to_date: date, stock_exchange: str) -> None:
     db = SessionLocal()
     try:
         logger.info("starting fetch_data backfill: from_date=%s to_date=%s stock_exchange=%s", from_date, to_date, stock_exchange)
+        excluded_weekdays = parse_excluded_weekdays(settings.excluded_weekdays)
         endpoints = oms_endpoint_service.get_active_endpoints(db)
         tokens_by_endpoint = get_tokens_for_active_endpoints(db)
         token_cache = {
@@ -121,8 +170,8 @@ def run(from_date: date, to_date: date, stock_exchange: str) -> None:
 
         while current <= to_date:
             day_str = current.strftime("%Y-%m-%d")
-            if is_weekend(current):
-                logger.info("Skipping weekend date: %s", day_str)
+            if is_excluded_weekday(current, excluded_weekdays):
+                logger.info("Skipping non-working day: %s (%s)", day_str, current.strftime("%A"))
                 current += timedelta(days=1)
                 continue
 
