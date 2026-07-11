@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     app_env: str = "uat"
 
     scheduled_time: str = "15:00"
+    scheduled_days: str = "sun,mon,tue,wed,thu"
     app_timezone: str = "Asia/Dhaka"
 
     default_stock_exchange: str = "DSE"
