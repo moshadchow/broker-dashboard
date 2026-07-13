@@ -53,8 +53,8 @@ export default function ComparisonTable({
             <TH>Total Value</TH>
             <TH>Buy Value</TH>
             <TH>Sell Value</TH>
-            <TH>Trade Share %</TH>
             <TH>Value Share %</TH>
+            <TH>Trade Share %</TH>
           </tr>
         </thead>
         <tbody className="table-body">
@@ -86,7 +86,7 @@ export default function ComparisonTable({
 
           {/* Aggregate row */}
           <tr className="bg-[var(--color-row-summary)] font-semibold">
-            <TD className="font-bold text-[var(--color-primary)]">Σ XFL</TD>
+            <TD className="font-bold text-[var(--color-primary)]">XFL Total</TD>
             <TD>{fmt(aggregateRow.totalExecutionReport)}</TD>
             <TD>{fmt(aggregateRow.totalTrade)}</TD>
             <TD>{fmt(aggregateRow.buyTrade)}</TD>
