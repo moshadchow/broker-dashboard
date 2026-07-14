@@ -46,13 +46,19 @@
 
   --color-chart-grid: #e5e7eb;
   --color-chart-axis: #64748b;
+  --color-chart-axis-line: #cbd5e1;
+  --color-chart-crosshair: #94a3b8;
+  --color-chart-plot-bg: #ffffff;
   --color-chart-tooltip-bg: #ffffff;
   --color-chart-tooltip-border: #cbd5e1;
+  --color-chart-tooltip-shadow: 0 18px 45px rgba(15, 23, 42, 0.16);
   --color-chart-brush: #94a3b8;
+  --color-chart-brush-bg: #f8fafc;
   --color-chart-own: #d97706;
   --color-chart-xfl: #2563eb;
   --color-chart-market: #059669;
   --color-chart-percent: #4f46e5;
+  --color-chart-neutral: #64748b;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -63,10 +69,10 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --color-bg: #0f172a;
-  --color-surface: #182235;
-  --color-surface-elevated: #1e293b;
-  --color-surface-muted: #263449;
+  --color-bg: #080d16;
+  --color-surface: #101826;
+  --color-surface-elevated: #151f2f;
+  --color-surface-muted: #1c293d;
   --color-header: #020617;
   --color-header-muted: #1e293b;
   --color-header-hover: #334155;
@@ -85,9 +91,9 @@
   --color-error-hover: #fca5a5;
   --color-error-soft: #7f1d1d;
 
-  --color-border: #334155;
-  --color-border-strong: #475569;
-  --color-divider: #334155;
+  --color-border: #223047;
+  --color-border-strong: #334155;
+  --color-divider: #25344c;
   --color-text-primary: #f8fafc;
   --color-text-secondary: #cbd5e1;
   --color-text-muted: #94a3b8;
@@ -104,15 +110,21 @@
   --color-row-summary: #172554;
   --color-row-error: #450a0a;
 
-  --color-chart-grid: #334155;
-  --color-chart-axis: #cbd5e1;
-  --color-chart-tooltip-bg: #111827;
-  --color-chart-tooltip-border: #475569;
+  --color-chart-grid: rgba(148, 163, 184, 0.14);
+  --color-chart-axis: #b6c2d2;
+  --color-chart-axis-line: rgba(148, 163, 184, 0.24);
+  --color-chart-crosshair: rgba(226, 232, 240, 0.34);
+  --color-chart-plot-bg: #0b1220;
+  --color-chart-tooltip-bg: #101826;
+  --color-chart-tooltip-border: rgba(148, 163, 184, 0.28);
+  --color-chart-tooltip-shadow: 0 24px 60px rgba(0, 0, 0, 0.38);
   --color-chart-brush: #64748b;
-  --color-chart-own: #fbbf24;
-  --color-chart-xfl: #60a5fa;
-  --color-chart-market: #34d399;
-  --color-chart-percent: #a78bfa;
+  --color-chart-brush-bg: #0d1626;
+  --color-chart-own: #f2b84b;
+  --color-chart-xfl: #55a6ff;
+  --color-chart-market: #35d2a0;
+  --color-chart-percent: #b49cff;
+  --color-chart-neutral: #94a3b8;
 }
 
 html,
@@ -150,6 +162,19 @@ body {
 
   .panel-pad {
     @apply bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-sm p-6;
+  }
+
+  .chart-panel {
+    @apply bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-sm p-6;
+    box-shadow: 0 16px 44px rgba(0, 0, 0, 0.12);
+  }
+
+  .chart-title {
+    @apply text-base font-semibold text-[var(--color-text-primary)] tracking-tight;
+  }
+
+  .chart-subtitle {
+    @apply text-xs font-medium text-[var(--color-text-muted)];
   }
 
   .field {
