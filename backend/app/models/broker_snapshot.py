@@ -20,11 +20,13 @@ from app.db.base import Base
 class BrokerSnapshot(Base):
     __tablename__ = "broker_snapshots"
     __table_args__ = (
-        UniqueConstraint("broker_id", "from_date", "to_date", name="uq_broker_date"),
+        UniqueConstraint("stock_exchange", "broker_id", "from_date", "to_date", name="uq_exchange_broker_date"),
         Index("idx_broker_fetched_at", "broker_id", "fetched_at"),
+        Index("idx_exchange_broker_fetched_at", "stock_exchange", "broker_id", "fetched_at"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    stock_exchange: Mapped[str] = mapped_column(String(8), nullable=False, default="DSE")
     broker_id: Mapped[str] = mapped_column(String(64), nullable=False)
     broker_label: Mapped[str] = mapped_column(String(16), nullable=False)
     from_date: Mapped[date] = mapped_column(Date, nullable=False)

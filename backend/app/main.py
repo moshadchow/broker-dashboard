@@ -8,6 +8,7 @@ from app.config import settings
 from app.db.base import Base
 from app.db.schema_upgrades import (
     ensure_broker_columns,
+    ensure_broker_snapshot_stock_exchange,
     ensure_market_snapshot_share_price_history_schema,
     ensure_oms_endpoint_fk,
     ensure_token_store_credential_name,
@@ -26,6 +27,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     ensure_broker_columns(engine)
     ensure_market_snapshot_share_price_history_schema(engine)
+    ensure_broker_snapshot_stock_exchange(engine)
 
     db = SessionLocal()
     try:

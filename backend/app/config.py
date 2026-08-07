@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     app_timezone: str = "Asia/Dhaka"
 
     default_stock_exchange: str = "DSE"
+    supported_exchanges: str = "DSE,CSE"
     token_refresh_skew_minutes: int = 5
 
     db_host: str = "localhost"
@@ -60,6 +61,10 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_allow_origins.split(",") if origin.strip()]
+
+    @property
+    def supported_exchanges_list(self) -> list[str]:
+        return [ex.strip().upper() for ex in self.supported_exchanges.split(",") if ex.strip()]
 
 
 settings = Settings()

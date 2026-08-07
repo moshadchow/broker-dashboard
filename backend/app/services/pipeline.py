@@ -1,6 +1,8 @@
 import logging
+import time
 
 from app.config import settings
+from app.config_data.exchanges import SUPPORTED_EXCHANGES, validate_exchange
 from app.db.session import SessionLocal
 from app.models.token_store import TokenStore
 from app.services import auth_service, broker_service, fetch_service, oms_endpoint_service, store_service
@@ -61,7 +63,7 @@ def _acquire_tokens(db, endpoint_names: set[str]) -> dict[str, str]:
 
 
 def _retry_failed_endpoints(
-    db, broker_results: list[dict], tokens: dict[str, str], from_date: str, to_date: str
+    db, broker_results: list[dict], tokens: dict[str, str], from_date: str, to_date: str, stock_exchange: str = "DSE"
 ) -> list[dict]:
     """For each endpoint where every broker fetch failed, refresh/re-login
     that endpoint's token once and retry just that endpoint's brokers.
@@ -113,7 +115,7 @@ def _retry_failed_endpoints(
     retry_brokers = [b for name in retry_endpoint_names for b in brokers_by_endpoint[name]]
     retry_endpoints = {name: endpoints[name] for name in retry_endpoint_names}
     retried_results = fetch_service.fetch_brokers_subset(
-        retry_brokers, retry_endpoints, tokens, from_date, to_date
+        retry_brokers, retry_endpoints, tokens, from_date, to_date, stock_exchange
     )
     retried_by_id = {r["broker"]["id"]: r for r in retried_results}
 
@@ -138,36 +140,61 @@ def run_pipeline() -> None:
         today = today_local()
         today_iso = today.isoformat()
 
-        broker_results = fetch_service.fetch_brokers(db, endpoints, tokens, today_iso, today_iso)
-        market_data = _fetch_market_with_retry(
-            db, market_endpoint, market_creds, settings.default_stock_exchange, today
-        )
+        total_brokers_ok = 0
+        total_brokers_failed = 0
+        any_market_ok = False
+        all_broker_results = []
 
-        # If every broker on a given endpoint failed, that endpoint's token may
-        # have expired mid-cycle - refresh and retry just that endpoint once.
-        if broker_results and any(r["fetch_error"] for r in broker_results):
-            broker_results = _retry_failed_endpoints(db, broker_results, tokens, today_iso, today_iso)
+        for stock_exchange in SUPPORTED_EXCHANGES:
+            exchange_start_time = time.time()
+            logger.info("fetching data for exchange=%s", stock_exchange)
 
-        store_service.store_broker_results(db, broker_results, today_iso, today_iso)
-        store_service.store_market_result(db, market_data, settings.default_stock_exchange, today)
+            broker_results = fetch_service.fetch_brokers(db, endpoints, tokens, today_iso, today_iso, stock_exchange)
+            market_data = _fetch_market_with_retry(
+                db, market_endpoint, market_creds, stock_exchange, today
+            )
 
-        brokers_ok = sum(1 for r in broker_results if not r["fetch_error"])
-        brokers_failed = len(broker_results) - brokers_ok
-        market_ok = market_data is not None
+            # If every broker on a given endpoint failed, that endpoint's token may
+            # have expired mid-cycle - refresh and retry just that endpoint once.
+            if broker_results and any(r["fetch_error"] for r in broker_results):
+                try:
+                    broker_results = _retry_failed_endpoints(db, broker_results, tokens, today_iso, today_iso, stock_exchange)
+                except ExternalAuthError:
+                    logger.warning("retry failed for exchange=%s; using original results", stock_exchange)
 
-        if brokers_failed == 0 and market_ok:
+            store_stats = store_service.store_broker_results(db, broker_results, today_iso, today_iso, stock_exchange)
+            market_stats = store_service.store_market_result(db, market_data, stock_exchange, today)
+
+            brokers_ok = sum(1 for r in broker_results if not r["fetch_error"])
+            brokers_failed = len(broker_results) - brokers_ok
+            market_ok = market_data is not None
+            exchange_duration_ms = int((time.time() - exchange_start_time) * 1000)
+
+            total_brokers_ok += brokers_ok
+            total_brokers_failed += brokers_failed
+            any_market_ok = any_market_ok or market_ok
+            all_broker_results.extend(broker_results)
+
+            logger.info(
+                "exchange=%s brokers_ok=%d brokers_failed=%d market_ok=%s duration_ms=%d records_inserted=%d",
+                stock_exchange, brokers_ok, brokers_failed, market_ok,
+                exchange_duration_ms, market_stats.get("inserted", 0),
+            )
+
+        if total_brokers_failed == 0 and any_market_ok:
             status = "success"
-        elif brokers_ok > 0 or market_ok:
+        elif total_brokers_ok > 0 or any_market_ok:
             status = "partial"
         else:
             status = "failed"
 
         store_service.log_pipeline_run(
-            db, started_at, now_utc(), status, brokers_ok, brokers_failed, market_ok
+            db, started_at, now_utc(), status, total_brokers_ok, total_brokers_failed, any_market_ok
         )
         logger.info(
-            "pipeline run finished: status=%s brokers_ok=%d brokers_failed=%d market_ok=%s endpoints=%s",
-            status, brokers_ok, brokers_failed, market_ok, sorted(active_endpoint_names),
+            "pipeline run finished: status=%s brokers_ok=%d brokers_failed=%d market_ok=%s endpoints=%s exchanges=%s",
+            status, total_brokers_ok, total_brokers_failed, any_market_ok,
+            sorted(active_endpoint_names), SUPPORTED_EXCHANGES,
         )
 
     except MfaRequiredError as exc:

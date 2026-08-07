@@ -1,10 +1,11 @@
 from datetime import date, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.config_data.exchanges import validate_exchange
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.models.broker_snapshot import BrokerSnapshot
@@ -33,11 +34,18 @@ def _aware_utc(dt):
 @router.get("/broker-data", response_model=BrokerDataResponse)
 def get_broker_data(
     toDate: date = Query(default=None),
+    stockExchange: str = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> BrokerDataResponse:
     if toDate is None:
         toDate = today_local()
+
+    try:
+        exchange = validate_exchange(stockExchange)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     rows: list[BrokerRowOut] = []
     latest_fetched_at = None
 
@@ -51,7 +59,10 @@ def get_broker_data(
     snapshots_by_broker: dict[str, BrokerSnapshot] = {}
     for snapshot in db.scalars(
         select(BrokerSnapshot)
-        .where(BrokerSnapshot.to_date == toDate)
+        .where(
+            BrokerSnapshot.stock_exchange == exchange,
+            BrokerSnapshot.to_date == toDate,
+        )
         .order_by(BrokerSnapshot.fetched_at.desc())
     ):
         snapshots_by_broker.setdefault(snapshot.broker_id, snapshot)
@@ -110,15 +121,21 @@ def get_broker_data(
 @router.get("/market-data", response_model=MarketDataResponse)
 def get_market_data(
     toDate: date = Query(default=None),
+    stockExchange: str = Query(default=None),
     db: Session = Depends(get_db),
 ) -> MarketDataResponse:
     if toDate is None:
         toDate = today_local()
 
+    try:
+        exchange = validate_exchange(stockExchange)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     snapshot = db.scalar(
         select(MarketSnapshot)
         .where(
-            MarketSnapshot.stock_exchange == settings.default_stock_exchange,
+            MarketSnapshot.stock_exchange == exchange,
             MarketSnapshot.snapshot_date == toDate,
         )
         .order_by(MarketSnapshot.times.desc(), MarketSnapshot.fetched_at.desc())
@@ -128,7 +145,7 @@ def get_market_data(
     if snapshot is None:
         return MarketDataResponse(
             success=False,
-            stockExchange=settings.default_stock_exchange,
+            stockExchange=exchange,
             fetchedAt=None,
             market=None,
         )

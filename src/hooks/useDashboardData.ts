@@ -35,8 +35,8 @@ export function useDashboardData(params: DashboardParams): DashboardData {
       setState(s => ({ ...s, loading: true, error: null }));
 
       const [brokerResp, marketResp] = await Promise.all([
-        fetchInternalBrokerData(params.toDate).catch(() => null),
-        fetchInternalMarketData(params.toDate).catch(() => null),
+        fetchInternalBrokerData(params.toDate, params.stockExchange).catch(() => null),
+        fetchInternalMarketData(params.toDate, params.stockExchange).catch(() => null),
       ]);
 
       if (cancelled) return;

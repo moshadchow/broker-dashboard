@@ -7,9 +7,11 @@ interface FilterBarProps {
   loading:  boolean;
 }
 
+const EXCHANGES = ['DSE', 'CSE'];
+
 export default function FilterBar({ params, onChange, onFetch, loading }: FilterBarProps) {
   const set = (key: keyof DashboardParams) =>
-    (e: React.ChangeEvent<HTMLInputElement>) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       onChange({ ...params, [key]: e.target.value });
 
   return (
@@ -36,13 +38,17 @@ export default function FilterBar({ params, onChange, onFetch, loading }: Filter
 
       <div className="flex flex-col gap-1">
         <label className="field-label">Stock Exchange</label>
-        <input
-          type="text"
+        <select
           value={params.stockExchange}
           onChange={set('stockExchange')}
-          placeholder="e.g. DSE"
           className="field w-32"
-        />
+        >
+          {EXCHANGES.map(exchange => (
+            <option key={exchange} value={exchange}>
+              {exchange}
+            </option>
+          ))}
+        </select>
       </div>
 
       <button

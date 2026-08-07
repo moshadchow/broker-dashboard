@@ -10,11 +10,13 @@ from app.models.pipeline_log import PipelineLog
 from app.services.fetch_service import ZERO_BROKER_DATA
 
 
-def store_broker_results(db: Session, broker_results: list[dict], from_date: str, to_date: str) -> None:
+def store_broker_results(db: Session, broker_results: list[dict], from_date: str, to_date: str, stock_exchange: str = "DSE") -> dict[str, int]:
+    stats = {"total": len(broker_results), "inserted": 0, "errors": 0}
     for result in broker_results:
         broker = result["broker"]
         data = result["data"] or ZERO_BROKER_DATA
         values = dict(
+            stock_exchange=stock_exchange,
             broker_id=broker["id"],
             broker_label=broker["label"],
             from_date=from_date,
@@ -29,11 +31,16 @@ def store_broker_results(db: Session, broker_results: list[dict], from_date: str
             fetch_error=result["fetch_error"],
         )
         stmt = mysql_insert(BrokerSnapshot).values(**values)
-        update_cols = {k: stmt.inserted[k] for k in values if k not in ("broker_id", "from_date", "to_date")}
+        update_cols = {k: stmt.inserted[k] for k in values if k not in ("stock_exchange", "broker_id", "from_date", "to_date")}
         update_cols["fetched_at"] = func.now()
         stmt = stmt.on_duplicate_key_update(**update_cols)
         db.execute(stmt)
+        if result["fetch_error"]:
+            stats["errors"] += 1
+        else:
+            stats["inserted"] += 1
     db.commit()
+    return stats
 
 
 def store_market_result(

@@ -28,6 +28,7 @@ def _fetch_broker_list(
     tokens: dict[str, str],
     from_date: str,
     to_date: str,
+    stock_exchange: str = "DSE",
 ) -> list[dict]:
     """Fetch broker summaries for the given brokers, grouped by the OMS
     endpoint each broker is routed to (broker.api_endpoint).
@@ -60,7 +61,7 @@ def _fetch_broker_list(
 
             try:
                 data = external_api.fetch_broker_summary(
-                    endpoint.base_url, token, broker.external_api_id, from_date, to_date
+                    endpoint.base_url, token, broker.external_api_id, from_date, to_date, stock_exchange
                 )
                 broker_results.append({"broker": broker_dict, "data": data, "fetch_error": False})
             except Exception:
@@ -79,11 +80,12 @@ def fetch_brokers(
     tokens: dict[str, str],
     from_date: str,
     to_date: str,
+    stock_exchange: str = "DSE",
 ) -> list[dict]:
     """Fetch broker summaries for all pipeline-enabled brokers (see
     `_fetch_broker_list` for the per-endpoint fetch/error-isolation logic)."""
     brokers = broker_service.list_brokers_for_pipeline(db)
-    return _fetch_broker_list(brokers, endpoints, tokens, from_date, to_date)
+    return _fetch_broker_list(brokers, endpoints, tokens, from_date, to_date, stock_exchange)
 
 
 def fetch_brokers_subset(
@@ -92,10 +94,11 @@ def fetch_brokers_subset(
     tokens: dict[str, str],
     from_date: str,
     to_date: str,
+    stock_exchange: str = "DSE",
 ) -> list[dict]:
     """Fetch broker summaries for an explicit broker list (e.g. retrying only
     the brokers on endpoints whose token was just refreshed)."""
-    return _fetch_broker_list(brokers, endpoints, tokens, from_date, to_date)
+    return _fetch_broker_list(brokers, endpoints, tokens, from_date, to_date, stock_exchange)
 
 
 def fetch_market(

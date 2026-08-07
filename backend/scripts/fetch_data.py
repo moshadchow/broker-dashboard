@@ -13,6 +13,8 @@ picks up `backend/.env`):
 
     cd backend
     python scripts/fetch_data.py --from-date 2026-07-05 --to-date 2026-07-06
+    python scripts/fetch_data.py --from-date 2026-07-05 --to-date 2026-07-06 --stock-exchange DSE
+    python scripts/fetch_data.py --from-date 2026-07-05 --to-date 2026-07-06 --stock-exchange CSE
 
 Credentials, DB connection, and pipeline defaults all come from `backend/.env`
 (see `app/config.py` / `backend/README.md` / project CLAUDE.md "Backend:
@@ -34,6 +36,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.config import CredentialSet, settings  # noqa: E402
+from app.config_data.exchanges import EXCHANGE_CONFIG, SUPPORTED_EXCHANGES, validate_exchange  # noqa: E402
 from app.db.session import SessionLocal  # noqa: E402
 from app.models.token_store import TokenStore  # noqa: E402
 from app.services import auth_service, broker_service, fetch_service, oms_endpoint_service, store_service  # noqa: E402
@@ -150,10 +153,82 @@ def get_tokens_for_active_endpoints(db) -> dict[str, str]:
     return tokens
 
 
-def run(from_date: date, to_date: date, stock_exchange: str) -> None:
+def process_exchange_for_date(
+    db,
+    target_date: date,
+    day_str: str,
+    stock_exchange: str,
+    endpoints: dict,
+    tokens_by_endpoint: dict[str, str],
+    token_cache: dict[str, str],
+) -> dict[str, int]:
+    """Process broker + market data for a single exchange on a single date.
+
+    Returns a stats dict with keys: broker_ok, broker_failed, market_fetched,
+    market_inserted, market_duplicates, error (0 or 1).
+    """
+    stats = {
+        "broker_ok": 0,
+        "broker_failed": 0,
+        "market_fetched": 0,
+        "market_inserted": 0,
+        "market_duplicates": 0,
+        "error": 0,
+    }
+
+    try:
+        market_endpoint = endpoints.get("market")
+        if market_endpoint is None:
+            raise NoTokenError("no 'market' OMS endpoint configured")
+
+        broker_results = fetch_service.fetch_brokers(
+            db, endpoints, tokens_by_endpoint, day_str, day_str, stock_exchange
+        )
+        market_data = fetch_market_with_retry(
+            db,
+            market_endpoint,
+            market_endpoint.credentials,
+            stock_exchange,
+            target_date,
+            token_cache,
+        )
+
+        if not broker_results:
+            logger.warning("%s [%s]: no pipeline-enabled brokers found", day_str, stock_exchange)
+
+        store_service.store_broker_results(db, broker_results, day_str, day_str, stock_exchange)
+        stats["broker_ok"] = sum(1 for r in broker_results if not r["fetch_error"])
+        stats["broker_failed"] = sum(1 for r in broker_results if r["fetch_error"])
+
+        if market_data is not None:
+            market_stats = store_service.store_market_result(
+                db, market_data, stock_exchange, target_date, skip_existing=True
+            )
+            stats["market_fetched"] = market_stats["fetched"]
+            stats["market_inserted"] = market_stats["inserted"]
+            stats["market_duplicates"] = market_stats["duplicates"]
+        else:
+            logger.warning("%s [%s]: market data fetch failed; no snapshot written", day_str, stock_exchange)
+
+    except Exception:
+        stats["error"] = 1
+        logger.exception("%s [%s]: failed; continuing with next exchange/date", day_str, stock_exchange)
+
+    return stats
+
+
+def run(from_date: date, to_date: date, exchanges: list[str]) -> None:
     db = SessionLocal()
     try:
-        logger.info("starting fetch_data backfill: from_date=%s to_date=%s stock_exchange=%s", from_date, to_date, stock_exchange)
+        exchange_label = ",".join(exchanges)
+        logger.info(
+            "Starting Historical Backfill\n"
+            "  From Date  : %s\n"
+            "  To Date    : %s\n"
+            "  Exchange   : %s",
+            from_date, to_date, exchange_label,
+        )
+
         excluded_weekdays = parse_excluded_weekdays(settings.excluded_weekdays)
         endpoints = oms_endpoint_service.get_active_endpoints(db)
         tokens_by_endpoint = get_tokens_for_active_endpoints(db)
@@ -162,12 +237,15 @@ def run(from_date: date, to_date: date, stock_exchange: str) -> None:
             for name, token in tokens_by_endpoint.items()
             if name in endpoints
         }
-        current = from_date
-        total_fetched = 0
-        total_inserted = 0
-        total_duplicates = 0
+
+        total_dates_processed = 0
+        total_broker_ok = 0
+        total_broker_failed = 0
+        total_market_inserted = 0
+        total_market_duplicates = 0
         total_errors = 0
 
+        current = from_date
         while current <= to_date:
             day_str = current.strftime("%Y-%m-%d")
             if is_excluded_weekday(current, excluded_weekdays):
@@ -175,52 +253,47 @@ def run(from_date: date, to_date: date, stock_exchange: str) -> None:
                 current += timedelta(days=1)
                 continue
 
-            logger.info("processing date=%s", day_str)
+            total_dates_processed += 1
 
-            try:
-                market_endpoint = endpoints.get("market")
-                if market_endpoint is None:
-                    raise NoTokenError("no 'market' OMS endpoint configured")
+            for stock_exchange in exchanges:
+                logger.info("Processing Date: %s | Exchange: %s", day_str, stock_exchange)
+                logger.info("  Fetching Broker Summary...")
+                logger.info("  Fetching Market Data...")
 
-                broker_results = fetch_service.fetch_brokers(db, endpoints, tokens_by_endpoint, day_str, day_str)
-                market_data = fetch_market_with_retry(
-                    db,
-                    market_endpoint,
-                    market_endpoint.credentials,
-                    stock_exchange,
-                    current,
-                    token_cache,
+                stats = process_exchange_for_date(
+                    db, current, day_str, stock_exchange,
+                    endpoints, tokens_by_endpoint, token_cache,
                 )
-                if not broker_results:
-                    logger.warning("%s: no pipeline-enabled brokers found in `brokers` table", day_str)
-                if market_data is None:
-                    raise RuntimeError(f"market data fetch failed for {day_str}")
 
-                store_service.store_broker_results(db, broker_results, day_str, day_str)
-                stats = store_service.store_market_result(db, market_data, stock_exchange, current, skip_existing=True)
+                total_broker_ok += stats["broker_ok"]
+                total_broker_failed += stats["broker_failed"]
+                total_market_inserted += stats["market_inserted"]
+                total_market_duplicates += stats["market_duplicates"]
+                total_errors += stats["error"]
 
-                total_fetched += stats["fetched"]
-                total_inserted += stats["inserted"]
-                total_duplicates += stats["duplicates"]
-                logger.info(
-                    "%s complete: fetched=%s inserted=%s duplicates_skipped=%s",
-                    day_str,
-                    stats["fetched"],
-                    stats["inserted"],
-                    stats["duplicates"],
-                )
-            except Exception:
-                total_errors += 1
-                logger.exception("%s failed; continuing with next date", day_str)
+                if stats["error"]:
+                    logger.info("  Status: %s [%s] - FAILED", day_str, stock_exchange)
+                else:
+                    logger.info("  Broker Snapshot Saved: ok=%d failed=%d", stats["broker_ok"], stats["broker_failed"])
+                    logger.info("  Market Snapshot Saved: inserted=%d duplicates=%d", stats["market_inserted"], stats["market_duplicates"])
+                    logger.info("  Status: %s [%s] - SUCCESS", day_str, stock_exchange)
+
             current += timedelta(days=1)
 
         logger.info(
-            "fetch_data backfill finished: from_date=%s to_date=%s fetched=%s inserted=%s duplicates_skipped=%s errors=%s",
-            from_date,
-            to_date,
-            total_fetched,
-            total_inserted,
-            total_duplicates,
+            "\nBackfill Completed\n"
+            "  Dates Processed   : %d\n"
+            "  Total Exchanges   : %d\n"
+            "  Broker Records    : %d (ok=%d, failed=%d)\n"
+            "  Market Records    : %d (duplicates=%d)\n"
+            "  Errors            : %d",
+            total_dates_processed,
+            len(exchanges),
+            total_broker_ok + total_broker_failed,
+            total_broker_ok,
+            total_broker_failed,
+            total_market_inserted,
+            total_market_duplicates,
             total_errors,
         )
     finally:
@@ -233,8 +306,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--to-date", help="YYYY-MM-DD; defaults to --from-date or today")
     parser.add_argument(
         "--stock-exchange",
-        default=settings.default_stock_exchange,
-        help=f"Defaults to DEFAULT_STOCK_EXCHANGE ({settings.default_stock_exchange})",
+        default=None,
+        help=f"Stock exchange: {', '.join(SUPPORTED_EXCHANGES)}. "
+             f"Omit to process all supported exchanges. "
+             f"Defaults to processing all exchanges.",
     )
     return parser.parse_args()
 
@@ -249,8 +324,18 @@ def main() -> None:
     if from_date > to_date:
         raise ValueError("--from-date must be <= --to-date")
 
+    if args.stock_exchange:
+        try:
+            exchange = validate_exchange(args.stock_exchange)
+        except ValueError as exc:
+            logger.error("Validation error: %s", exc)
+            raise
+        exchanges = [exchange]
+    else:
+        exchanges = list(SUPPORTED_EXCHANGES)
+
     try:
-        run(from_date, to_date, args.stock_exchange)
+        run(from_date, to_date, exchanges)
     except MfaRequiredError:
         logger.exception("MFA required for service account; cannot proceed automatically")
         raise

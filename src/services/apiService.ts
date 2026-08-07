@@ -7,16 +7,16 @@ import type {
   DashboardParams,
 } from '../types';
 
-export async function fetchInternalBrokerData(toDate: string): Promise<BrokerDataResponse> {
+export async function fetchInternalBrokerData(toDate: string, stockExchange: string): Promise<BrokerDataResponse> {
   const res = await httpClient.get<BrokerDataResponse>(ENDPOINTS.internalBrokerData, {
-    params: { toDate },
+    params: { toDate, stockExchange },
   });
   return res.data;
 }
 
-export async function fetchInternalMarketData(toDate: string): Promise<MarketDataResponse> {
+export async function fetchInternalMarketData(toDate: string, stockExchange: string): Promise<MarketDataResponse> {
   const res = await httpClient.get<MarketDataResponse>(ENDPOINTS.internalMarketData, {
-    params: { toDate },
+    params: { toDate, stockExchange },
   });
   return res.data;
 }

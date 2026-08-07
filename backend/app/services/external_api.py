@@ -3,10 +3,10 @@ from datetime import date, datetime, time
 
 import httpx
 
+from app.config_data.exchanges import EXCHANGE_CONFIG, get_market_symbol
 from app.utils.time import app_tz, today_local
 
 REQUEST_TIMEOUT = 30
-SHARE_PRICE_SYMBOL = "DSEX"
 SHARE_PRICE_MARKET_TYPE = "Public"
 SHARE_PRICE_RESOLUTION = "1D"
 SHARE_PRICE_PAGE_SIZE = 100000000
@@ -90,10 +90,12 @@ def refresh_token(base_url: str, access_token: str, refresh_token_value: str, de
     return data
 
 
-def fetch_broker_summary(base_url: str, access_token: str, broker_id: str, from_date: str, to_date: str) -> dict:
+def fetch_broker_summary(
+    base_url: str, access_token: str, broker_id: str, from_date: str, to_date: str, stock_exchange: str = "DSE"
+) -> dict:
     resp = httpx.get(
         f"{base_url}/api/broker-summary/orders-execution",
-        params={"fromDate": from_date, "toDate": to_date},
+        params={"fromDate": from_date, "toDate": to_date, "stockExchange": stock_exchange},
         headers={"Authorization": f"Bearer {access_token}", "X-BrokerId": broker_id},
         timeout=REQUEST_TIMEOUT,
     )
@@ -181,10 +183,11 @@ def fetch_market_trade_info(
 ) -> list[dict]:
     target_date = target_date or today_local()
     target_timestamp = _timestamp_for_date(target_date)
+    market_symbol = get_market_symbol(stock_exchange)  # type: ignore[arg-type]
     resp = httpx.get(
         f"{base_url}/api/share-price-histories/{stock_exchange}",
         params={
-            "Filter.Symbol": SHARE_PRICE_SYMBOL,
+            "Filter.Symbol": market_symbol,
             "Filter.marketType": SHARE_PRICE_MARKET_TYPE,
             "Filter.resolution": SHARE_PRICE_RESOLUTION,
             "Filter.from": target_timestamp,

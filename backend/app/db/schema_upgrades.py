@@ -178,3 +178,46 @@ def ensure_market_snapshot_share_price_history_schema(engine: Engine) -> None:
                 )
             )
             logger.info("Added unique index market_snapshots.uq_exchange_day_time")
+
+
+def ensure_broker_snapshot_stock_exchange(engine: Engine) -> None:
+    """Add stock_exchange column to broker_snapshots table.
+
+    Migrates broker_snapshots to support multiple stock exchanges (DSE/CSE).
+    Adds stock_exchange column and updates unique constraint.
+    """
+    inspector = inspect(engine)
+    if "broker_snapshots" not in inspector.get_table_names():
+        return
+
+    existing_cols = {col["name"] for col in inspector.get_columns("broker_snapshots")}
+
+    with engine.begin() as conn:
+        if "stock_exchange" not in existing_cols:
+            conn.execute(text("ALTER TABLE broker_snapshots ADD COLUMN stock_exchange VARCHAR(8) NOT NULL DEFAULT 'DSE'"))
+            logger.info("Added column broker_snapshots.stock_exchange")
+
+        unique_constraints = {constraint["name"] for constraint in inspector.get_unique_constraints("broker_snapshots")}
+        if "uq_broker_date" in unique_constraints:
+            conn.execute(text("ALTER TABLE broker_snapshots DROP INDEX uq_broker_date"))
+            logger.info("Dropped unique index broker_snapshots.uq_broker_date")
+
+        unique_constraints = {constraint["name"] for constraint in inspect(conn).get_unique_constraints("broker_snapshots")}
+        if "uq_exchange_broker_date" not in unique_constraints:
+            conn.execute(
+                text(
+                    "ALTER TABLE broker_snapshots ADD CONSTRAINT uq_exchange_broker_date "
+                    "UNIQUE (`stock_exchange`, `broker_id`, `from_date`, `to_date`)"
+                )
+            )
+            logger.info("Added unique index broker_snapshots.uq_exchange_broker_date")
+
+        indexes = {index["name"] for index in inspector.get_indexes("broker_snapshots")}
+        if "idx_exchange_broker_fetched_at" not in indexes:
+            conn.execute(
+                text(
+                    "CREATE INDEX idx_exchange_broker_fetched_at "
+                    "ON broker_snapshots (`stock_exchange`, `broker_id`, `fetched_at`)"
+                )
+            )
+            logger.info("Added index broker_snapshots.idx_exchange_broker_fetched_at")
