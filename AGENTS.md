@@ -1,31 +1,66 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
+## Project Structure
 
-This repository contains a React/Vite frontend and a Python backend. Frontend code lives in `src/`, with `components/`, `components/admin/`, `services/`, `hooks/`, `context/`, `config/`, and `types/` holding the main UI and data-access layers. Backend code lives in `backend/app/`, organized into `routers/`, `services/`, `models/`, `schemas/`, `db/`, `dependencies/`, `scheduler/`, and `utils/`. Operational helpers are in `backend/scripts/`. Generated folders such as `dist/`, `node_modules/`, virtual environments, logs, and `__pycache__/` should not be committed.
+React/Vite frontend (`src/`) + FastAPI/MySQL backend (`backend/`). Frontend: `components/`, `components/admin/`, `services/`, `hooks/`, `context/`, `config/`, `types/`. Backend: `routers/`, `services/`, `models/`, `schemas/`, `db/`, `dependencies/`, `scheduler/`. Do not commit `dist/`, `node_modules/`, `.venv/`, `__pycache__/`, or `.env` files.
 
-## Build, Test, and Development Commands
+## Commands
 
-Frontend commands run from the repository root: `npm install` installs dependencies, `npm run dev` starts Vite, `npm run build` type-checks and builds `dist/`, and `npm run preview` serves the production build.
+**Frontend** (repo root):
+```
+npm install
+npm run dev          # Vite dev server, proxies /api/internal, /auth, /admin to :8000
+npm run build        # tsc -b && vite build (type-check + production build)
+```
 
-Backend commands run from `backend/`: `python -m venv .venv` creates an environment, `.venv\Scripts\activate` activates it on Windows, `pip install -r requirements.txt` installs dependencies, and `uvicorn app.main:app --reload --port 8000` starts the API server.
+**Backend** (`backend/`):
+```
+python -m venv .venv
+.venv\Scripts\activate          # Windows
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
 
-## Coding Style & Naming Conventions
+No test suite or linter is configured. Verify frontend with `npm run build`. Verify backend by exercising endpoints manually.
 
-Use TypeScript and React functional components in the frontend. Name components in `PascalCase` such as `Dashboard.tsx`, hooks with `use` prefixes such as `useDashboardData.ts`, and services with domain names such as `authService.ts`.
+## Architecture: Two Independent Auth Systems
 
-Use Python modules in `snake_case`. Keep route handlers in `routers/`, business logic in `services/`, database models in `models/`, and request/response contracts in `schemas/`. Prefer typed signatures and explicit names.
+This is the most common source of confusion:
 
-## Testing Guidelines
+1. **Auto-credential pipeline** (backend-only): FastAPI authenticates against the external broker API (`https://uat.xfltrade.com:20121`) using service accounts stored in the `oms_endpoints` DB table. Runs on APScheduler. The frontend never talks to the external API or handles these tokens.
 
-No test runner or committed test suite is currently configured. Before submitting changes, run `npm run build` for frontend type and build checks. For backend changes, start `uvicorn app.main:app --reload --port 8000` and exercise changed endpoints manually. Add future tests near covered code, using `*.test.tsx` for frontend tests and `test_*.py` for backend tests.
+2. **Admin panel JWT auth** (human users): `/auth/*` endpoints issue access/refresh tokens. Roles: `admin`, `user`. Completely independent from the pipeline — does not touch `token_store`, `broker_snapshots`, `market_snapshots`, `pipeline_logs`, or `config_data/brokers.py`.
 
-## Commit & Pull Request Guidelines
+## Broker List Sync
 
-Recent commits use short, imperative summaries, for example `Replace market snapshot with price history` and `Update script for fetch_data.py`. Keep commit messages focused on one change.
+`src/config/brokers.ts` and `backend/app/config_data/brokers.py` **must be kept in sync** (same broker IDs, labels, and order). The backend file seeds/backfills the `brokers` DB table at startup. The frontend file is the hardcoded fallback when the internal API is unreachable. If you add/remove a broker, update both files.
 
-Pull requests should include a clear description, affected frontend/backend areas, setup or migration notes, and screenshots for visible UI changes. Link related issues when available and list verification commands or manual checks.
+## OMS Endpoints (Critical Setup)
 
-## Security & Configuration Tips
+The `oms_endpoints` table **starts empty** on a fresh database. An admin must create rows via `/admin/oms-endpoints` (typically `primary`, `secondary`, `puji`, `market`) before the pipeline has anything to fetch. There is no `.env` seed for these. Rotating `APP_ENCRYPTION_KEY` breaks all existing encrypted passwords — re-enter every endpoint's password via the admin UI afterward.
 
-Do not commit `.env` files, service credentials, JWT secrets, database passwords, or generated tokens. Backend configuration belongs in environment variables. Keep frontend `src/config/brokers.ts` and backend broker configuration aligned when broker lists change.
+## Vite Proxy Gotcha
+
+The `/admin` proxy in `vite.config.ts` has a `bypass` rule: browser navigations (`Accept: text/html`) serve `/index.html` for SPA routing, while API calls (axios, `Accept: application/json`) proxy through to the backend. Don't remove this bypass or admin SPA routes break on hard refresh.
+
+## Backend Deployment
+
+Run exactly **one** uvicorn worker. The in-process `BackgroundScheduler` (`backend/app/scheduler/jobs.py`) runs the daily pipeline — multiple workers duplicate pipeline runs. Use systemd `Restart=on-failure` for crash recovery, not multi-worker mode.
+
+## Default Admin Account
+
+On fresh DB with empty `users` table: `admin@xfl.com` / `Admin@1234`, `role=admin`, `must_change_password=True`. Change the password immediately after first login.
+
+## Key Limitations
+
+- `FilterBar` date range and stock exchange inputs have **no effect** on returned data — the internal endpoints always serve the latest cached snapshot (v1 limitation).
+- `$id` fields in external API responses are serialization artifacts — ignored.
+- `date: "0001-01-01T00:00:00"` in market response = server default when no date filter applies — display as "—".
+
+## Production Deploy
+
+Frontend: `npm run build`, served by nginx (`dashboard.conf`). Backend: uvicorn on `127.0.0.1:8000`. nginx proxies `/api/internal/`, `/auth/`, `/admin/` to backend; everything else serves `index.html` for client-side routing.
+
+## Security
+
+Never commit `.env`, service credentials, JWT secrets, or generated tokens. Backend config belongs in environment variables. See `CLAUDE.md` for full architecture details and `DEPLOYMENT.md` for production setup.
