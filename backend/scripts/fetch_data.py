@@ -17,7 +17,7 @@ picks up `backend/.env`):
     python scripts/fetch_data.py --from-date 2026-07-05 --to-date 2026-07-06 --stock-exchange CSE
 
 Credentials, DB connection, and pipeline defaults all come from `backend/.env`
-(see `app/config.py` / `backend/README.md` / project CLAUDE.md "Backend:
+(see `app/config.py` / `backend/README.md` "Backend:
 Auto-Credential Pipeline").
 
 Note: unlike the live pipeline (which only ever fetches "today"), this script

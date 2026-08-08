@@ -35,6 +35,10 @@ function fmtValue(v: number, isPercent = false): string {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(v);
 }
 
+function fmtMillions(v: number): string {
+  return `${(v / 1_000_000).toFixed(2)} M`;
+}
+
 interface ChartRow {
   date:                 string;
   fullDate:             string;
@@ -133,12 +137,13 @@ function ChartLegend({ payload, chartTheme }: {
 }
 
 function CustomTooltip({
-  active, payload, label, chartTheme,
+  active, payload, label, chartTheme, metric,
 }: {
   active?:  boolean;
   payload?: TooltipPayloadItem[];
   label?:   string;
   chartTheme: ChartTheme;
+  metric:   MetricKind;
 }) {
   if (!active || !payload?.length) return null;
 
@@ -169,7 +174,7 @@ function CustomTooltip({
                 {p.name}
               </span>
               <span className="font-semibold tabular-nums" style={{ color: p.color }}>
-                {fmtValue(p.value, isPercent)}
+                {(!isPercent && metric === 'value') ? fmtMillions(p.value) : fmtValue(p.value, isPercent)}
               </span>
             </div>
             {!isPercent && (pctOfMarket !== undefined || pctOfXfl !== undefined) && (
@@ -267,7 +272,7 @@ function TrendLineChart({
             width={52}
           />
           <Tooltip
-            content={<CustomTooltip chartTheme={chartTheme} />}
+            content={<CustomTooltip chartTheme={chartTheme} metric={metric} />}
             cursor={{ stroke: chartTheme.crosshair, strokeWidth: 1 }}
             isAnimationActive
             animationDuration={180}
